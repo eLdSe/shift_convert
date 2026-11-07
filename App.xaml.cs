@@ -36,40 +36,24 @@ public partial class App : Application
         AppConfig.Load();
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        if (e.Args.Length > 0 && string.Equals(e.Args[0], "--init-shellext", StringComparison.OrdinalIgnoreCase))
-        {
-            AppConfig.InstallAndActivateShellExtension(AppConfig.Data.HoldShiftEnabled);
-            if (AppConfig.Data.ContextMenuEnabled)
-            {
-                AppConfig.SetContextMenu(true);
-            }
-            Shutdown();
-            return;
-        }
-
-        // Проверяем, запущено ли приложение из контекстного меню ПКМ (--wheel "путь"), из Shell Extension (--drag-wheel) или перетаскиванием файла на .exe
-        var cliFiles = ParseCliFiles(e.Args, out string? directAction, out bool isDragWheel);
-        if (cliFiles.Count > 0 || isDragWheel)
+        // Проверяем, запущено ли приложение из контекстного меню ПКМ (--wheel "путь") или перетаскиванием файла на .exe
+        var cliFiles = ParseCliFiles(e.Args, out string? directAction);
+        if (cliFiles.Count > 0)
         {
             IsOneShotMode = true;
             base.OnStartup(e);
 
-            if (!string.IsNullOrEmpty(directAction) && cliFiles.Count > 0)
+            if (!string.IsNullOrEmpty(directAction))
             {
                 var opts = ConvertEngine.GetOptionsForFiles(cliFiles, forWheel: false);
                 var chosen = opts.FirstOrDefault(o => string.Equals(o.Key, directAction, StringComparison.OrdinalIgnoreCase))
                              ?? new ConvertOption { Key = directAction, Label = directAction.ToUpperInvariant(), Icon = "\uE945" };
                 RadialWheelWindow.ExecuteAndNotify(cliFiles, chosen, shutdownOnComplete: true);
             }
-            else if (cliFiles.Count > 0)
-            {
-                NativeMethods.GetCursorPos(out var pt);
-                RadialWheelWindow.ShowForFilesAtCursor(cliFiles.ToArray(), pt.x, pt.y, isOneShot: true);
-            }
             else
             {
                 NativeMethods.GetCursorPos(out var pt);
-                RadialWheelWindow.TryShowAtCursor(pt.x, pt.y, isOneShot: true);
+                RadialWheelWindow.ShowForFilesAtCursor(cliFiles.ToArray(), pt.x, pt.y, isOneShot: true);
             }
             return;
         }
@@ -106,13 +90,15 @@ public partial class App : Application
             {
                 AppConfig.SetContextMenu(true);
             }
-            AppConfig.InstallAndActivateShellExtension(AppConfig.Data.HoldShiftEnabled);
         });
 
         base.OnStartup(e);
 
         InitLightweightTrayHost();
         GlobalDragHook.Initialize();
+
+        // Если запущено с флагом --tray (при старте системы), вообще не создаём главное окно HubWindow —
+        // процесс сразу остаётся в глубоком спящем режиме (~2-4 МБ ОЗУ, 0% CPU)!
         bool silent = e.Args.Length > 0 && string.Equals(e.Args[0], "--tray", StringComparison.OrdinalIgnoreCase);
         if (!silent)
         {
@@ -124,10 +110,9 @@ public partial class App : Application
         }
     }
 
-    private static List<string> ParseCliFiles(string[] args, out string? directAction, out bool isDragWheel)
+    private static List<string> ParseCliFiles(string[] args, out string? directAction)
     {
         directAction = null;
-        isDragWheel = false;
         var list = new List<string>();
         if (args == null || args.Length == 0) return list;
 
@@ -135,13 +120,7 @@ public partial class App : Application
         {
             string a = args[i];
             if (string.Equals(a, "--tray", StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(a, "--init-shellext", StringComparison.OrdinalIgnoreCase)) continue;
             if (string.Equals(a, "--wheel", StringComparison.OrdinalIgnoreCase)) continue;
-            if (string.Equals(a, "--drag-wheel", StringComparison.OrdinalIgnoreCase))
-            {
-                isDragWheel = true;
-                continue;
-            }
             if (string.Equals(a, "--action", StringComparison.OrdinalIgnoreCase) && i + 1 < args.Length)
             {
                 directAction = args[++i];
@@ -173,9 +152,8 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// При закрытии окна (✕) выгружает тяжёлое окно HubWindow из оперативной памяти в сверхлёгкий спящий режим (~2-3 МБ ОЗУ, 0% CPU).
-    /// Хук перетаскивания с Shift и иконка в трее продолжают мгновенно работать.
-    /// Полное выключение процесса выполняется через кнопку «Выключить» в сайдбаре или меню трея.
+    /// Полностью выгружает тяжёлое окно HubWindow из оперативной памяти при сворачивании в фон.
+    /// Хук клавиши Shift и иконка в трее продолжают работать с минимальным потреблением ОЗУ (~2-4 МБ).
     /// </summary>
     public static void UnloadHubToSleepMode()
     {
@@ -549,142 +527,12 @@ public static class AppConfig
                 string exe = Environment.ProcessPath ?? "";
                 if (!string.IsNullOrEmpty(exe))
                 {
-                    key.SetValue(RunValueName, $"\"{exe}\" --init-shellext");
+                    key.SetValue(RunValueName, $"\"{exe}\" --tray");
                 }
             }
             else
             {
                 key.DeleteValue(RunValueName, false);
-            }
-        }
-        catch { }
-    }
-
-    private const string ShellExtClsid = "{E7D4A8B2-9C1F-4E5A-8B3D-1F2E3D4C5B6A}";
-    private static readonly string[] ShellExtHandlerPaths =
-    {
-        @"Software\Classes\*\shellex\ContextMenuHandlers\ShiftConvertShellExt",
-        @"Software\Classes\Directory\shellex\ContextMenuHandlers\ShiftConvertShellExt",
-        @"Software\Classes\Directory\Background\shellex\ContextMenuHandlers\ShiftConvertShellExt",
-        @"Software\Classes\*\shellex\DragDropHandlers\ShiftConvertShellExt",
-        @"Software\Classes\Directory\shellex\DragDropHandlers\ShiftConvertShellExt"
-    };
-
-    public static void InstallAndActivateShellExtension(bool enable)
-    {
-        try
-        {
-            string appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-            string cfgDir = Path.Combine(appData, "ShiftConvert");
-            Directory.CreateDirectory(cfgDir);
-
-            string targetFile = Path.Combine(cfgDir, "shellext_target.txt");
-            string dllPath = Path.Combine(cfgDir, "ShiftConvertShellExt.dll");
-
-            if (!enable)
-            {
-                try { if (File.Exists(targetFile)) File.Delete(targetFile); } catch { }
-                foreach (var hp in ShellExtHandlerPaths)
-                {
-                    Registry.CurrentUser.DeleteSubKeyTree(hp, false);
-                }
-                return;
-            }
-
-            string exe = Environment.ProcessPath ?? "";
-            if (!string.IsNullOrEmpty(exe) && File.Exists(exe))
-            {
-                File.WriteAllText(targetFile, exe);
-            }
-
-            // Извлекаем встроенную микро-DLL расширения Проводника
-            try
-            {
-                using var stream = typeof(App).Assembly.GetManifestResourceStream("ShiftConvertShellExt.dll");
-                if (stream != null)
-                {
-                    using var ms = new MemoryStream();
-                    stream.CopyTo(ms);
-                    byte[] bytes = ms.ToArray();
-                    bool needWrite = !File.Exists(dllPath) || new FileInfo(dllPath).Length != bytes.Length;
-                    if (needWrite)
-                    {
-                        try { File.WriteAllBytes(dllPath, bytes); } catch { }
-                    }
-                }
-            }
-            catch { }
-
-            if (!File.Exists(dllPath)) return;
-
-            string codeBaseUri = new Uri(dllPath).AbsoluteUri;
-
-            using (var clsidKey = Registry.CurrentUser.CreateSubKey($@"Software\Classes\CLSID\{ShellExtClsid}"))
-            {
-                clsidKey.SetValue("", "ShiftConvert Explorer Drag Extension");
-                clsidKey.SetValue("AppID", ShellExtClsid);
-
-                using (var progId = clsidKey.CreateSubKey("ProgID"))
-                {
-                    progId.SetValue("", "ShiftConvertShellExt.ExplorerDragExtension");
-                }
-
-                using var inproc = clsidKey.CreateSubKey("InprocServer32");
-                inproc.SetValue("", "mscoree.dll");
-                inproc.SetValue("ThreadingModel", "Both");
-                inproc.SetValue("Class", "ShiftConvertShellExt.ExplorerDragExtension");
-                inproc.SetValue("Assembly", "ShiftConvertShellExt, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null");
-                inproc.SetValue("RuntimeVersion", "v4.0.30319");
-                inproc.SetValue("CodeBase", codeBaseUri);
-
-                using var verSub = inproc.CreateSubKey("1.0.0.0");
-                verSub.SetValue("Class", "ShiftConvertShellExt.ExplorerDragExtension");
-                verSub.SetValue("Assembly", "ShiftConvertShellExt, Version=1.0.0.0, Culture=neutral, PublicKeyToken=null");
-                verSub.SetValue("RuntimeVersion", "v4.0.30319");
-                verSub.SetValue("CodeBase", codeBaseUri);
-            }
-
-            using (var progIdKey = Registry.CurrentUser.CreateSubKey(@"Software\Classes\ShiftConvertShellExt.ExplorerDragExtension\CLSID"))
-            {
-                progIdKey.SetValue("", ShellExtClsid);
-            }
-
-            using (var appIdKey = Registry.CurrentUser.CreateSubKey($@"Software\Classes\AppID\{ShellExtClsid}"))
-            {
-                appIdKey.SetValue("", "ShiftConvert Explorer Drag Extension");
-                appIdKey.SetValue("DllSurrogate", "");
-            }
-
-            using (var approvedKey = Registry.CurrentUser.CreateSubKey(@"Software\Microsoft\Windows\CurrentVersion\Shell Extensions\Approved"))
-            {
-                approvedKey.SetValue(ShellExtClsid, "ShiftConvert Explorer Drag Extension");
-            }
-
-            foreach (var hp in ShellExtHandlerPaths)
-            {
-                using var hk = Registry.CurrentUser.CreateSubKey(hp);
-                hk.SetValue("", ShellExtClsid);
-            }
-
-            ActivateShellExtensionHost();
-        }
-        catch { }
-    }
-
-    public static void ActivateShellExtensionHost()
-    {
-        try
-        {
-            Guid clsid = new Guid(ShellExtClsid);
-            Guid iidUnknown = new Guid("00000000-0000-0000-C000-000000000046");
-            int hr = NativeMethods.CoCreateInstance(ref clsid, IntPtr.Zero, 1 /* CLSCTX_INPROC_SERVER */, ref iidUnknown, out IntPtr pUnk);
-            if (hr != 0 || pUnk == IntPtr.Zero)
-            {
-                hr = NativeMethods.CoCreateInstance(ref clsid, IntPtr.Zero, 4 /* CLSCTX_LOCAL_SERVER */, ref iidUnknown, out pUnk);
-            }
-            if (pUnk != IntPtr.Zero)
-            {
-                Marshal.Release(pUnk);
             }
         }
         catch { }
@@ -800,7 +648,4 @@ public static class NativeMethods
 
     [DllImport("user32.dll", SetLastError = true)]
     public static extern bool PostMessage(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-    [DllImport("ole32.dll")]
-    public static extern int CoCreateInstance(ref Guid rclsid, IntPtr pUnkOuter, uint dwClsContext, ref Guid riid, out IntPtr ppv);
 }

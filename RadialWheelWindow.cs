@@ -135,10 +135,10 @@ public static class GlobalDragHook
                     {
                         int dx = _lastMouseX - _dragStartX;
                         int dy = _lastMouseY - _dragStartY;
-                        if (dx * dx + dy * dy >= 144) _dragThresholdMet = true; // >= 12px
+                        if (dx * dx + dy * dy > 324) _dragThresholdMet = true;
                     }
 
-                    if (_dragThresholdMet && !_wheelTriggeredThisDrag)
+                    if (_dragThresholdMet && !_shiftHeldAtStart && !_wheelTriggeredThisDrag)
                     {
                         if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0)
                         {
@@ -177,7 +177,7 @@ public static class GlobalDragHook
 
     private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && _lButtonDown && _dragThresholdMet && !_wheelTriggeredThisDrag && AppConfig.Data.HoldShiftEnabled)
+        if (nCode >= 0 && _lButtonDown && _dragThresholdMet && !_shiftHeldAtStart && !_wheelTriggeredThisDrag && AppConfig.Data.HoldShiftEnabled)
         {
             int msg = (int)wParam;
             if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
@@ -260,7 +260,7 @@ public sealed class RadialWheelWindow : Window
     private const int VK_RBUTTON = 0x02;
     private const int VK_ESCAPE = 0x1B;
 
-    public static void TryShowAtCursor(int screenPxX, int screenPxY, bool isOneShot = false)
+    public static void TryShowAtCursor(int screenPxX, int screenPxY)
     {
         if (_active != null) return;
         if (Environment.TickCount64 - _lastCloseTicks < 350) return;
@@ -270,23 +270,14 @@ public sealed class RadialWheelWindow : Window
             if (_active != null) return;
             try
             {
-                var files = ConvertEngine.GetSelectedExplorerFiles();
-                if (files != null && files.Length > 0)
-                {
-                    ShowForFilesAtCursor(files, screenPxX, screenPxY, isOneShot);
-                    return;
-                }
-
-                var win = new RadialWheelWindow(screenPxX, screenPxY, null, isOneShot);
+                var win = new RadialWheelWindow(screenPxX, screenPxY, null, false);
                 _active = win;
                 win.Show();
-                mouse_event(MOUSEEVENTF_MOVE, 1, 1, 0, UIntPtr.Zero);
-                mouse_event(MOUSEEVENTF_MOVE, -1, -1, 0, UIntPtr.Zero);
+                mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
             }
             catch
             {
                 _active = null;
-                if (isOneShot) Application.Current?.Shutdown();
             }
         });
     }
@@ -422,7 +413,7 @@ public sealed class RadialWheelWindow : Window
 
         Content = _rootGrid;
 
-        _probeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        _probeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
         _probeTimer.Tick += (_, _) =>
         {
             _probeTimer.Stop();

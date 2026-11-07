@@ -1269,15 +1269,15 @@ public sealed class HubWindow : Window
 
         _setShiftTitle.Text = Loc.T("Радиальное колесо при зажатии Shift", "Radial wheel on Shift key", "Shift tuşuyla radyal tekerlek");
         _setShiftDesc.Text = Loc.T(
-            "Открывать круговое меню форматов при перетаскивании файла с клавишей Shift (работает через расширение Проводника Windows даже без фонового процесса — 0 МБ ОЗУ, 0% CPU)",
-            "Open the radial format selector when dragging any file + Shift (powered by Windows Explorer Shell Extension — 0 MB RAM, 0% CPU)",
-            "Dosyayı sürüklerken Shift'e basıldığında dairesel menüyü aç (Windows Gezgini eklentisiyle — 0 MB RAM, %0 CPU)");
+            "Открывать круговое меню форматов при перетаскивании файла с клавишей Shift (в спящем режиме ~3 МБ ОЗУ)",
+            "Open the radial format selector when dragging any file + Shift (sleep mode ~3 MB RAM)",
+            "Dosyayı sürüklerken Shift'e basıldığında dairesel menüyü aç (~3 MB RAM)");
 
         _setCtxTitle.Text = Loc.T("Меню правой кнопки мыши (ПКМ в Проводнике)", "Explorer right-click context menu", "Dosya Gezgini sağ tık menüsü");
         _setCtxDesc.Text = Loc.T(
-            "Пункт «⚡ ShiftConvert» при клике ПКМ по файлу или папке — работает мгновенно даже когда приложение полностью закрыто",
-            "Add '⚡ ShiftConvert' to right-click menu — works instantly on-demand even when the application is closed",
-            "Sağ tık menüsüne '⚡ ShiftConvert' ekle — uygulama tamamen kapalıyken bile anında çalışır");
+            "Пункт «⚡ ShiftConvert» при клике ПКМ по файлу или папке — работает даже когда приложение полностью выключено",
+            "Add '⚡ ShiftConvert' to right-click menu — works on-demand even when background process is quit",
+            "Sağ tık menüsüne '⚡ ShiftConvert' ekle — uygulama tamamen kapalıyken bile çalışır");
 
         _setClipTitle.Text = Loc.T("Автокопирование результата в буфер (Ctrl+V)", "Auto-copy converted file to clipboard (Ctrl+V)", "Sonucu otomatik panoya kopyala (Ctrl+V)");
         _setClipDesc.Text = Loc.T(
@@ -1297,12 +1297,12 @@ public sealed class HubWindow : Window
             "Start only the micro Shift listener without creating UI window (0% CPU, ~3 MB RAM)",
             "Pencere oluşturmadan yalnızca mikro Shift dinleyicisini başlat (%0 CPU, ~3 MB RAM)");
 
-        _powerCardTitle.Text = Loc.T("Работа в фоне и закрытие окна", "Background execution & close behavior", "Arka plan ve kapatma davranışı");
+        _powerCardTitle.Text = Loc.T("Спящий режим и полное выключение", "Sleep mode & full shutdown", "Uyku modu ve tamamen kapatma");
         _powerCardDesc.Text = Loc.T(
-            "Крестик (✕) выгружает приложение из памяти (0 МБ ОЗУ). Благодаря расширению Проводника Windows, меню ПКМ и вызов по Shift продолжают мгновенно работать по требованию!",
-            "Close (✕) unloads the application from RAM (0 MB RAM). Powered by Windows Explorer Shell Extension, Right-Click menu and Shift drag continue to work instantly on demand!",
-            "Kapat (✕) uygulamayı bellekten kaldırır (0 MB RAM). Windows Gezgini eklentisi sayesinde Sağ tık menüsü ve Shift ile sürükleme anında çalışmaya devam eder!");
-        _hideToBgBtnLabel.Text = Loc.T("Выгрузить из памяти", "Unload from RAM", "Bellekten kaldır");
+            "Крестик (✕) полностью выгружает окно из памяти в спящий режим (работает Shift). «Выключить» завершает процесс (остаётся работать меню ПКМ).",
+            "Close (✕) unloads the window into sleep mode (Shift works). 'Quit' terminates the process (Right-Click menu still works).",
+            "Kapat (✕) pencereyi bellekten kaldırır (Shift çalışır). 'Kapat' süreci sonlandırır (Sağ tık menüsü çalışmaya devam eder).");
+        _hideToBgBtnLabel.Text = Loc.T("В спящий режим", "Sleep mode", "Uyku modu");
         _quitFullBtnLabel.Text = Loc.T("Выключить полностью", "Quit process", "Tamamen kapat");
 
         RefreshAllStateUI();
@@ -1314,7 +1314,7 @@ public sealed class HubWindow : Window
         bool shiftOn = AppConfig.Data.HoldShiftEnabled;
         _bgStatusDot.Fill = shiftOn ? AccentLime : TextFaint;
         _bgStatusText.Text = shiftOn
-            ? Loc.T("Плагин Explorer · 0% CPU", "Explorer Plugin · 0% CPU", "Gezgin Eklentisi · %0 CPU")
+            ? Loc.T("Спящий хук · 0% CPU", "Sleep hook · 0% CPU", "Uyku kancası · %0 CPU")
             : Loc.T("Только ПКМ", "Right-click only", "Sadece sağ tık");
 
         int totalCount = Math.Max(AppConfig.Data.TotalConvertedCount, AppConfig.Data.History.Count);
