@@ -5,6 +5,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Media.Effects;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
@@ -13,26 +14,49 @@ using System.Windows.Threading;
 namespace ShiftConvertApp;
 
 /// <summary>
-/// Интерактивное окно предпросмотра и покадрового выбора момента из видео для экспорта в PNG.
-/// Поддерживает плавный скраббинг, воспроизведение (Пробел), шаг по 1 кадру (← / →), шаг по 1 сек и сохранение (Enter).
+/// Премиальное окно предпросмотра и покадрового выбора момента из видео для экспорта в PNG.
+/// Оснащено кастомным плавным скраббером с hover-таймкодом, переключением звука (M),
+/// пошаговой перемоткой по 1 кадру (← / →), шагом по 1 сек и мгновенным сохранением (Enter).
 /// </summary>
 public sealed class VideoFramePickerWindow : Window
 {
+    private static readonly SolidColorBrush AccentLime = Freeze(new SolidColorBrush(Color.FromRgb(0xC6, 0xF2, 0x4E)));
+    private static readonly SolidColorBrush TrackBg = Freeze(new SolidColorBrush(Color.FromRgb(0x2A, 0x2D, 0x37)));
+    private static readonly SolidColorBrush TrackHoverBg = Freeze(new SolidColorBrush(Color.FromRgb(0x38, 0x3C, 0x49)));
+    private static readonly SolidColorBrush BubbleBg = Freeze(new SolidColorBrush(Color.FromRgb(0x1E, 0x20, 0x28)));
+    private static readonly SolidColorBrush BubbleBorder = Freeze(new SolidColorBrush(Color.FromRgb(0x3A, 0x3D, 0x4A)));
+
+    private static SolidColorBrush Freeze(SolidColorBrush b)
+    {
+        b.Freeze();
+        return b;
+    }
+
     private readonly string _videoPath;
     private readonly Windows.Media.Editing.MediaComposition? _composition;
     private double _totalSeconds;
+    private double _currentSeconds;
     private bool _isPlaying;
-    private bool _isDraggingSlider;
+    private bool _isDraggingScrubber;
     private bool _isFallbackMode;
     private bool _isSeekingFallback;
 
     private readonly DispatcherTimer _playTimer;
     private readonly MediaElement _mediaElement;
     private readonly Image _fallbackImage;
-    private readonly Slider _slider;
+
+    // Кастомный скраббер
+    private readonly Grid _scrubberContainer;
+    private readonly Border _scrubberTrack;
+    private readonly Border _scrubberProgress;
+    private readonly Border _scrubberThumb;
+    private readonly Border _hoverBubble;
+    private readonly TextBlock _hoverBubbleText;
+
     private readonly TextBlock _currentTimeText;
     private readonly TextBlock _totalTimeText;
     private readonly TextBlock _playIcon;
+    private readonly TextBlock _muteIcon;
     private readonly Border _playOverlayBadge;
 
     public double SelectedSeconds { get; private set; }
@@ -49,10 +73,10 @@ public sealed class VideoFramePickerWindow : Window
         _totalSeconds = totalSeconds > 0 ? totalSeconds : 10.0;
 
         Title = Loc.T("Выбор кадра", "Select Frame", "Kare Seç");
-        Width = 840;
-        Height = 600;
-        MinWidth = 660;
-        MinHeight = 480;
+        Width = 860;
+        Height = 620;
+        MinWidth = 680;
+        MinHeight = 500;
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -62,37 +86,37 @@ public sealed class VideoFramePickerWindow : Window
 
         _playTimer = new DispatcherTimer
         {
-            Interval = TimeSpan.FromMilliseconds(33) // ~30 fps обновление таймлайна
+            Interval = TimeSpan.FromMilliseconds(33) // ~30 fps плавное обновление таймлайна
         };
         _playTimer.Tick += PlayTimer_Tick;
 
-        // Корневая карточка со скруглением и мягкой тенью
+        // Корневая карточка True-Black-Flat со скруглением и глубокой тенью
         var rootBorder = new Border
         {
             CornerRadius = new CornerRadius(16),
-            Background = new SolidColorBrush(Color.FromRgb(0x16, 0x17, 0x1C)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x2E, 0x31, 0x3A)),
+            Background = new SolidColorBrush(Color.FromRgb(0x13, 0x14, 0x18)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x27, 0x2A, 0x33)),
             BorderThickness = new Thickness(1),
             Effect = new DropShadowEffect
             {
-                BlurRadius = 36,
-                ShadowDepth = 10,
-                Opacity = 0.55,
+                BlurRadius = 40,
+                ShadowDepth = 12,
+                Opacity = 0.60,
                 Color = Colors.Black
             }
         };
 
         var mainGrid = new Grid();
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 0: Заголовок
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // 1: Видео
-        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 2: Таймлайн и кнопки
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 0: Шапка
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // 1: Видеохолст
+        mainGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // 2: Таймлайн и действия
         rootBorder.Child = mainGrid;
         Content = rootBorder;
 
-        // ==================== 0. Заголовок ====================
+        // ==================== 0. Шапка ====================
         var headerGrid = new Grid
         {
-            Margin = new Thickness(20, 16, 16, 12),
+            Margin = new Thickness(22, 16, 16, 12),
             Background = Brushes.Transparent
         };
         headerGrid.MouseLeftButtonDown += (_, e) =>
@@ -104,10 +128,10 @@ public sealed class VideoFramePickerWindow : Window
 
         var iconText = new TextBlock
         {
-            Text = "\uEB9F", // Символ кадра / фотоплёнки
+            Text = "\uEB9F", // Иконка кадра
             FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"),
             FontSize = 17,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xC6, 0xF2, 0x4E)), // Акцентный салатовый
+            Foreground = AccentLime,
             VerticalAlignment = VerticalAlignment.Center,
             Margin = new Thickness(0, 0, 10, 0)
         };
@@ -135,7 +159,6 @@ public sealed class VideoFramePickerWindow : Window
             MaxWidth = 480
         };
         titlePanel.Children.Add(subTitleText);
-
         headerGrid.Children.Add(titlePanel);
 
         // Кнопка закрытия ✕
@@ -151,15 +174,15 @@ public sealed class VideoFramePickerWindow : Window
         Grid.SetRow(headerGrid, 0);
         mainGrid.Children.Add(headerGrid);
 
-        // ==================== 1. Область видео ====================
+        // ==================== 1. Видеохолст ====================
         var videoContainer = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(0x0C, 0x0D, 0x10)),
-            CornerRadius = new CornerRadius(10),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x22, 0x24, 0x2B)),
+            Background = new SolidColorBrush(Color.FromRgb(0x0A, 0x0A, 0x0D)),
+            CornerRadius = new CornerRadius(12),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0x1F, 0x22, 0x2A)),
             BorderThickness = new Thickness(1),
             ClipToBounds = true,
-            Margin = new Thickness(20, 0, 20, 14),
+            Margin = new Thickness(20, 0, 20, 12),
             Cursor = Cursors.Hand
         };
         videoContainer.MouseLeftButtonDown += (_, e) =>
@@ -191,7 +214,7 @@ public sealed class VideoFramePickerWindow : Window
             Stretch = Stretch.Uniform,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            IsMuted = true
+            IsMuted = true // По умолчанию без звука для бесшумного скраббинга
         };
         _mediaElement.MediaOpened += MediaElement_MediaOpened;
         _mediaElement.MediaEnded += MediaElement_MediaEnded;
@@ -207,13 +230,13 @@ public sealed class VideoFramePickerWindow : Window
         };
         videoGrid.Children.Add(_fallbackImage);
 
-        // Полупрозрачный оверлей паузы по центру
+        // Оверлей воспроизведения/паузы по центру
         _playOverlayBadge = new Border
         {
-            Width = 56,
-            Height = 56,
-            CornerRadius = new CornerRadius(28),
-            Background = new SolidColorBrush(Color.FromArgb(160, 0, 0, 0)),
+            Width = 60,
+            Height = 60,
+            CornerRadius = new CornerRadius(30),
+            Background = new SolidColorBrush(Color.FromArgb(170, 0, 0, 0)),
             BorderBrush = new SolidColorBrush(Color.FromArgb(80, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -225,7 +248,7 @@ public sealed class VideoFramePickerWindow : Window
         {
             Text = "\uE768", // Play
             FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"),
-            FontSize = 22,
+            FontSize = 24,
             Foreground = Brushes.White,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
@@ -238,35 +261,113 @@ public sealed class VideoFramePickerWindow : Window
         Grid.SetRow(videoContainer, 1);
         mainGrid.Children.Add(videoContainer);
 
-        // ==================== 2. Таймлайн и элементы управления ====================
+        // ==================== 2. Панель таймлайна и действий ====================
         var controlsPanel = new StackPanel
         {
             Margin = new Thickness(20, 0, 20, 18)
         };
 
-        // Слайдер таймлайна
-        _slider = new Slider
+        // --- Кастомный скраббер в стиле Telegram/QuickTime ---
+        _scrubberContainer = new Grid
         {
-            Minimum = 0,
-            Maximum = _totalSeconds,
-            Value = 0,
-            Height = 26,
+            Height = 32,
             Cursor = Cursors.Hand,
-            FocusVisualStyle = null,
+            Background = Brushes.Transparent, // Ловит события мыши по всей высоте
             Margin = new Thickness(0, 0, 0, 6)
         };
-        _slider.PreviewMouseLeftButtonDown += Slider_PreviewMouseLeftButtonDown;
-        _slider.PreviewMouseLeftButtonUp += Slider_PreviewMouseLeftButtonUp;
-        _slider.ValueChanged += Slider_ValueChanged;
-        controlsPanel.Children.Add(_slider);
 
-        // Строка навигации: Время слева, Кнопки шага по центру, Подсказки справа
-        var navGrid = new Grid { Margin = new Thickness(0, 2, 0, 14) };
+        // Фоновый трек
+        _scrubberTrack = new Border
+        {
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
+            Background = TrackBg,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Stretch
+        };
+        _scrubberContainer.Children.Add(_scrubberTrack);
+
+        // Заполнение прогресса
+        _scrubberProgress = new Border
+        {
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
+            Background = AccentLime,
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Width = 0
+        };
+        _scrubberContainer.Children.Add(_scrubberProgress);
+
+        // Ползунок (Thumb)
+        _scrubberThumb = new Border
+        {
+            Width = 12,
+            Height = 12,
+            CornerRadius = new CornerRadius(6),
+            Background = Brushes.White,
+            BorderBrush = AccentLime,
+            BorderThickness = new Thickness(1.5),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(-6, 0, 0, 0),
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 8,
+                ShadowDepth = 1,
+                Opacity = 0.45,
+                Color = Colors.Black
+            }
+        };
+        _scrubberContainer.Children.Add(_scrubberThumb);
+
+        // Всплывающий таймкод при наведении (Hover Tooltip Bubble)
+        _hoverBubble = new Border
+        {
+            CornerRadius = new CornerRadius(5),
+            Background = BubbleBg,
+            BorderBrush = BubbleBorder,
+            BorderThickness = new Thickness(1),
+            Padding = new Thickness(7, 3, 7, 3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Top,
+            Visibility = Visibility.Collapsed,
+            IsHitTestVisible = false,
+            Effect = new DropShadowEffect
+            {
+                BlurRadius = 10,
+                ShadowDepth = 3,
+                Opacity = 0.5,
+                Color = Colors.Black
+            }
+        };
+        _hoverBubbleText = new TextBlock
+        {
+            Text = "00:00.00",
+            FontSize = 11,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = Brushes.White
+        };
+        _hoverBubble.Child = _hoverBubbleText;
+        _scrubberContainer.Children.Add(_hoverBubble);
+
+        // События скраббера
+        _scrubberContainer.MouseEnter += Scrubber_MouseEnter;
+        _scrubberContainer.MouseLeave += Scrubber_MouseLeave;
+        _scrubberContainer.MouseMove += Scrubber_MouseMove;
+        _scrubberContainer.MouseLeftButtonDown += Scrubber_MouseLeftButtonDown;
+        _scrubberContainer.MouseLeftButtonUp += Scrubber_MouseLeftButtonUp;
+        _scrubberContainer.SizeChanged += (_, _) => UpdateScrubberVisuals();
+
+        controlsPanel.Children.Add(_scrubberContainer);
+
+        // --- Строка навигации: Таймкод слева, Кнопки по центру, Клавиши справа ---
+        var navGrid = new Grid { Margin = new Thickness(0, 0, 0, 14) };
         navGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         navGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         navGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        // Время слева
+        // Таймкод слева
         var timePanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
         _currentTimeText = new TextBlock
         {
@@ -295,7 +396,7 @@ public sealed class VideoFramePickerWindow : Window
         Grid.SetColumn(timePanel, 0);
         navGrid.Children.Add(timePanel);
 
-        // Кнопки покадрового шага по центру
+        // Кнопки по центру (Шаг -1с, -кадр, Play/Pause, +кадр, +1с, Звук)
         var stepButtons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -303,12 +404,12 @@ public sealed class VideoFramePickerWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
 
-        var back1sBtn = CreateSmallButton("⏮ -1с", Loc.T("Назад на 1 сек (Shift+←)", "Back 1s (Shift+←)", "1 sn Geri (Shift+←)"), () => SeekRelative(-1.0));
-        var backFrameBtn = CreateSmallButton("◀ -кадр", Loc.T("Назад на 1 кадр (←)", "Back 1 frame (←)", "1 kare Geri (←)"), () => SeekRelative(-0.04));
+        var back1sBtn = CreateSmallButton("⏮ -1с", Loc.T("Назад 1 сек (Shift+←)", "Back 1s (Shift+←)", "1 sn Geri (Shift+←)"), () => SeekRelative(-1.0));
+        var backFrameBtn = CreateSmallButton("◀ -кадр", Loc.T("Назад 1 кадр (←)", "Back 1 frame (←)", "1 kare Geri (←)"), () => SeekRelative(-0.04));
 
         var playBtn = new Border
         {
-            Width = 40,
+            Width = 44,
             Height = 32,
             CornerRadius = new CornerRadius(8),
             Background = new SolidColorBrush(Color.FromRgb(0x27, 0x2A, 0x33)),
@@ -326,23 +427,49 @@ public sealed class VideoFramePickerWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
         playBtn.Child = _playIcon;
-        playBtn.MouseEnter += (_, _) => playBtn.Background = new SolidColorBrush(Color.FromRgb(0x34, 0x38, 0x44));
+        playBtn.MouseEnter += (_, _) => playBtn.Background = new SolidColorBrush(Color.FromRgb(0x35, 0x39, 0x46));
         playBtn.MouseLeave += (_, _) => playBtn.Background = new SolidColorBrush(Color.FromRgb(0x27, 0x2A, 0x33));
         playBtn.MouseLeftButtonDown += (_, e) => { TogglePlayPause(); e.Handled = true; };
 
-        var fwdFrameBtn = CreateSmallButton("+кадр ▶", Loc.T("Вперёд на 1 кадр (→)", "Forward 1 frame (→)", "1 kare İleri (→)"), () => SeekRelative(0.04));
-        var fwd1sBtn = CreateSmallButton("+1с ⏭", Loc.T("Вперёд на 1 сек (Shift+→)", "Forward 1s (Shift+→)", "1 sn İleri (Shift+→)"), () => SeekRelative(1.0));
+        var fwdFrameBtn = CreateSmallButton("+кадр ▶", Loc.T("Вперёд 1 кадр (→)", "Forward 1 frame (→)", "1 kare İleri (→)"), () => SeekRelative(0.04));
+        var fwd1sBtn = CreateSmallButton("+1с ⏭", Loc.T("Вперёд 1 сек (Shift+→)", "Forward 1s (Shift+→)", "1 sn İleri (Shift+→)"), () => SeekRelative(1.0));
+
+        // Кнопка включения/выключения звука (Mute / Unmute)
+        var muteBtn = new Border
+        {
+            Width = 34,
+            Height = 32,
+            CornerRadius = new CornerRadius(8),
+            Background = new SolidColorBrush(Color.FromRgb(0x20, 0x22, 0x2A)),
+            Margin = new Thickness(8, 0, 0, 0),
+            Cursor = Cursors.Hand,
+            ToolTip = Loc.T("Звук (M)", "Audio Toggle (M)", "Ses (M)")
+        };
+        _muteIcon = new TextBlock
+        {
+            Text = "\uE74F", // Mute icon
+            FontFamily = new FontFamily("Segoe Fluent Icons, Segoe MDL2 Assets, Segoe UI Symbol"),
+            FontSize = 14,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x9E, 0xA2, 0xB0)),
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        muteBtn.Child = _muteIcon;
+        muteBtn.MouseEnter += (_, _) => muteBtn.Background = new SolidColorBrush(Color.FromRgb(0x2C, 0x30, 0x3B));
+        muteBtn.MouseLeave += (_, _) => muteBtn.Background = new SolidColorBrush(Color.FromRgb(0x20, 0x22, 0x2A));
+        muteBtn.MouseLeftButtonDown += (_, e) => { ToggleMute(); e.Handled = true; };
 
         stepButtons.Children.Add(back1sBtn);
         stepButtons.Children.Add(backFrameBtn);
         stepButtons.Children.Add(playBtn);
         stepButtons.Children.Add(fwdFrameBtn);
         stepButtons.Children.Add(fwd1sBtn);
+        stepButtons.Children.Add(muteBtn);
 
         Grid.SetColumn(stepButtons, 1);
         navGrid.Children.Add(stepButtons);
 
-        // Подсказка клавиатуры справа
+        // Подсказка горячих клавиш справа
         var hintText = new TextBlock
         {
             Text = Loc.T("Пробел: Старт/Пауза  ·  ← / →: Кадр  ·  Enter: ОК", "Space: Play  ·  ← / →: Frame  ·  Enter: OK", "Boşluk: Oynat  ·  ← / →: Kare  ·  Enter: Tamam"),
@@ -356,7 +483,7 @@ public sealed class VideoFramePickerWindow : Window
 
         controlsPanel.Children.Add(navGrid);
 
-        // Нижняя полоса действий: Инфо о PNG слева, Кнопки Отмена и Сохранить справа
+        // --- Нижняя полоса действий ---
         var bottomGrid = new Grid();
         bottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         bottomGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
@@ -392,7 +519,7 @@ public sealed class VideoFramePickerWindow : Window
 
         var cancelBtn = CreateButton(
             Loc.T("Отмена", "Cancel", "İptal"),
-            Color.FromRgb(0x27, 0x2A, 0x33),
+            Color.FromRgb(0x24, 0x26, 0x30),
             Color.FromRgb(0xD1, 0xD5, 0xDB),
             isAccent: false,
             onClick: () =>
@@ -405,8 +532,8 @@ public sealed class VideoFramePickerWindow : Window
 
         var saveBtn = CreateButton(
             Loc.T("Сохранить кадр (Enter)", "Save Frame (Enter)", "Kareyi Kaydet (Enter)"),
-            Color.FromRgb(0xC6, 0xF2, 0x4E), // Акцентный салатовый
-            Color.FromRgb(0x11, 0x18, 0x27), // Тёмный текст для максимального контраста
+            Color.FromRgb(0xC6, 0xF2, 0x4E),
+            Color.FromRgb(0x11, 0x18, 0x27),
             isAccent: true,
             onClick: ConfirmSelection);
         actionsPanel.Children.Add(saveBtn);
@@ -435,9 +562,97 @@ public sealed class VideoFramePickerWindow : Window
         }
     }
 
+    // --- Обработка скраббера ---
+    private void Scrubber_MouseEnter(object sender, MouseEventArgs e)
+    {
+        _scrubberTrack.Height = 6;
+        _scrubberProgress.Height = 6;
+        _scrubberThumb.Width = 16;
+        _scrubberThumb.Height = 16;
+        _scrubberThumb.CornerRadius = new CornerRadius(8);
+        _scrubberThumb.Margin = new Thickness(-8, 0, 0, 0);
+    }
+
+    private void Scrubber_MouseLeave(object sender, MouseEventArgs e)
+    {
+        if (!_isDraggingScrubber)
+        {
+            _scrubberTrack.Height = 4;
+            _scrubberProgress.Height = 4;
+            _scrubberThumb.Width = 12;
+            _scrubberThumb.Height = 12;
+            _scrubberThumb.CornerRadius = new CornerRadius(6);
+            _scrubberThumb.Margin = new Thickness(-6, 0, 0, 0);
+            _hoverBubble.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    private void Scrubber_MouseMove(object sender, MouseEventArgs e)
+    {
+        double width = _scrubberContainer.ActualWidth;
+        if (width <= 0 || _totalSeconds <= 0) return;
+
+        Point pt = e.GetPosition(_scrubberContainer);
+        double ratio = Math.Clamp(pt.X / width, 0.0, 1.0);
+        double hoverSec = ratio * _totalSeconds;
+
+        // Позиционируем hover bubble точно над курсором
+        _hoverBubbleText.Text = FormatTime(hoverSec);
+        double bubbleX = Math.Clamp(pt.X - 28, 0, Math.Max(0, width - 60));
+        _hoverBubble.Margin = new Thickness(bubbleX, -14, 0, 0);
+        _hoverBubble.Visibility = Visibility.Visible;
+
+        if (_isDraggingScrubber)
+        {
+            SeekTo(hoverSec);
+        }
+    }
+
+    private void Scrubber_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _isDraggingScrubber = true;
+        _scrubberContainer.CaptureMouse();
+        if (_isPlaying)
+        {
+            _isPlaying = false;
+            _mediaElement.Pause();
+            _playTimer.Stop();
+            UpdatePlayIcon();
+        }
+
+        double width = _scrubberContainer.ActualWidth;
+        if (width > 0 && _totalSeconds > 0)
+        {
+            Point pt = e.GetPosition(_scrubberContainer);
+            double ratio = Math.Clamp(pt.X / width, 0.0, 1.0);
+            SeekTo(ratio * _totalSeconds);
+        }
+    }
+
+    private void Scrubber_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _isDraggingScrubber = false;
+        _scrubberContainer.ReleaseMouseCapture();
+        if (!_scrubberContainer.IsMouseOver)
+        {
+            Scrubber_MouseLeave(sender, e);
+        }
+    }
+
+    private void UpdateScrubberVisuals()
+    {
+        double width = _scrubberContainer.ActualWidth;
+        if (width <= 0 || _totalSeconds <= 0) return;
+
+        double ratio = Math.Clamp(_currentSeconds / _totalSeconds, 0.0, 1.0);
+        double progressWidth = ratio * width;
+        _scrubberProgress.Width = progressWidth;
+        _scrubberThumb.Margin = new Thickness(progressWidth - (_scrubberThumb.Width / 2.0), 0, 0, 0);
+    }
+
     private void PlayTimer_Tick(object? sender, EventArgs e)
     {
-        if (_isPlaying && !_isDraggingSlider)
+        if (_isPlaying && !_isDraggingScrubber)
         {
             double curSec = _mediaElement.Position.TotalSeconds;
             if (curSec >= _totalSeconds)
@@ -448,8 +663,9 @@ public sealed class VideoFramePickerWindow : Window
                 UpdatePlayIcon();
                 curSec = _totalSeconds;
             }
-            _slider.Value = curSec;
+            _currentSeconds = curSec;
             _currentTimeText.Text = FormatTime(curSec);
+            UpdateScrubberVisuals();
         }
     }
 
@@ -461,14 +677,11 @@ public sealed class VideoFramePickerWindow : Window
             if (dur > 0)
             {
                 _totalSeconds = dur;
-                _slider.Maximum = dur;
                 _totalTimeText.Text = FormatTime(dur);
             }
         }
 
-        // По умолчанию встаем на 15% длительности или 0.5с
         double initial = _totalSeconds > 1.2 ? Math.Min(_totalSeconds * 0.15, _totalSeconds - 0.1) : Math.Max(0.0, _totalSeconds * 0.5);
-        _slider.Value = initial;
         SeekTo(initial);
     }
 
@@ -491,42 +704,7 @@ public sealed class VideoFramePickerWindow : Window
         _mediaElement.Visibility = Visibility.Collapsed;
         _fallbackImage.Visibility = Visibility.Visible;
         double initial = _totalSeconds > 1.2 ? Math.Min(_totalSeconds * 0.15, _totalSeconds - 0.1) : 0.0;
-        _slider.Value = initial;
-        _ = UpdateFallbackThumbnailAsync(initial);
-    }
-
-    private void Slider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        _isDraggingSlider = true;
-        if (_isPlaying)
-        {
-            _isPlaying = false;
-            _mediaElement.Pause();
-            _playTimer.Stop();
-            UpdatePlayIcon();
-        }
-
-        var p = e.GetPosition(_slider);
-        if (_slider.ActualWidth > 0)
-        {
-            double ratio = Math.Clamp(p.X / _slider.ActualWidth, 0.0, 1.0);
-            double newSec = _slider.Minimum + ratio * (_slider.Maximum - _slider.Minimum);
-            _slider.Value = newSec;
-            SeekTo(newSec);
-        }
-    }
-
-    private void Slider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-    {
-        _isDraggingSlider = false;
-    }
-
-    private void Slider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (!_isPlaying)
-        {
-            SeekTo(e.NewValue);
-        }
+        SeekTo(initial);
     }
 
     private void SeekRelative(double deltaSec)
@@ -538,23 +716,22 @@ public sealed class VideoFramePickerWindow : Window
             _playTimer.Stop();
             UpdatePlayIcon();
         }
-        double target = Math.Clamp(_slider.Value + deltaSec, 0.0, _totalSeconds);
-        _slider.Value = target;
-        SeekTo(target);
+        SeekTo(Math.Clamp(_currentSeconds + deltaSec, 0.0, _totalSeconds));
     }
 
     private void SeekTo(double sec)
     {
-        double clamped = Math.Clamp(sec, 0.0, _totalSeconds);
-        _currentTimeText.Text = FormatTime(clamped);
+        _currentSeconds = Math.Clamp(sec, 0.0, _totalSeconds);
+        _currentTimeText.Text = FormatTime(_currentSeconds);
+        UpdateScrubberVisuals();
 
         if (!_isFallbackMode)
         {
-            _mediaElement.Position = TimeSpan.FromSeconds(clamped);
+            _mediaElement.Position = TimeSpan.FromSeconds(_currentSeconds);
         }
         else
         {
-            _ = UpdateFallbackThumbnailAsync(clamped);
+            _ = UpdateFallbackThumbnailAsync(_currentSeconds);
         }
     }
 
@@ -607,7 +784,6 @@ public sealed class VideoFramePickerWindow : Window
             if (_mediaElement.Position.TotalSeconds >= _totalSeconds - 0.1)
             {
                 _mediaElement.Position = TimeSpan.Zero;
-                _slider.Value = 0;
             }
             _isPlaying = true;
             _mediaElement.Play();
@@ -615,6 +791,21 @@ public sealed class VideoFramePickerWindow : Window
             _playOverlayBadge.Visibility = Visibility.Collapsed;
         }
         UpdatePlayIcon();
+    }
+
+    private void ToggleMute()
+    {
+        _mediaElement.IsMuted = !_mediaElement.IsMuted;
+        if (_mediaElement.IsMuted)
+        {
+            _muteIcon.Text = "\uE74F"; // Mute
+            _muteIcon.Foreground = new SolidColorBrush(Color.FromRgb(0x9E, 0xA2, 0xB0));
+        }
+        else
+        {
+            _muteIcon.Text = "\uE767"; // Unmuted
+            _muteIcon.Foreground = AccentLime;
+        }
     }
 
     private void UpdatePlayIcon()
@@ -630,7 +821,7 @@ public sealed class VideoFramePickerWindow : Window
             _mediaElement.Pause();
             _playTimer.Stop();
         }
-        SelectedSeconds = Math.Clamp(_slider.Value, 0.0, _totalSeconds);
+        SelectedSeconds = Math.Clamp(_currentSeconds, 0.0, _totalSeconds);
         DialogResult = true;
         Close();
     }
@@ -653,6 +844,11 @@ public sealed class VideoFramePickerWindow : Window
             TogglePlayPause();
             e.Handled = true;
         }
+        else if (e.Key == Key.M)
+        {
+            ToggleMute();
+            e.Handled = true;
+        }
         else if (e.Key == Key.Left)
         {
             double step = (Keyboard.Modifiers & ModifierKeys.Shift) != 0 ? 1.0 : 0.04;
@@ -668,13 +864,11 @@ public sealed class VideoFramePickerWindow : Window
         else if (e.Key == Key.Home)
         {
             SeekTo(0);
-            _slider.Value = 0;
             e.Handled = true;
         }
         else if (e.Key == Key.End)
         {
             SeekTo(_totalSeconds);
-            _slider.Value = _totalSeconds;
             e.Handled = true;
         }
     }
@@ -700,7 +894,7 @@ public sealed class VideoFramePickerWindow : Window
         var border = new Border
         {
             CornerRadius = new CornerRadius(6),
-            Background = new SolidColorBrush(Color.FromRgb(0x22, 0x24, 0x2B)),
+            Background = new SolidColorBrush(Color.FromRgb(0x20, 0x22, 0x2A)),
             Padding = new Thickness(10, 6, 10, 6),
             Margin = new Thickness(3, 0, 3, 0),
             Cursor = Cursors.Hand,
@@ -714,8 +908,8 @@ public sealed class VideoFramePickerWindow : Window
             Foreground = new SolidColorBrush(Color.FromRgb(0xD1, 0xD5, 0xDB))
         };
         border.Child = text;
-        border.MouseEnter += (_, _) => border.Background = new SolidColorBrush(Color.FromRgb(0x2E, 0x32, 0x3D));
-        border.MouseLeave += (_, _) => border.Background = new SolidColorBrush(Color.FromRgb(0x22, 0x24, 0x2B));
+        border.MouseEnter += (_, _) => border.Background = new SolidColorBrush(Color.FromRgb(0x2C, 0x30, 0x3B));
+        border.MouseLeave += (_, _) => border.Background = new SolidColorBrush(Color.FromRgb(0x20, 0x22, 0x2A));
         border.MouseLeftButtonDown += (_, e) => { onClick(); e.Handled = true; };
         return border;
     }
@@ -776,7 +970,7 @@ public sealed class VideoFramePickerWindow : Window
 
         Color hoverBg = isAccent
             ? Color.FromArgb(255, (byte)Math.Min(255, bg.R + 25), (byte)Math.Min(255, bg.G + 25), (byte)Math.Min(255, bg.B + 25))
-            : Color.FromArgb(255, 0x36, 0x3A, 0x46);
+            : Color.FromArgb(255, 0x33, 0x36, 0x42);
 
         border.MouseEnter += (_, _) => border.Background = new SolidColorBrush(hoverBg);
         border.MouseLeave += (_, _) => border.Background = new SolidColorBrush(bg);

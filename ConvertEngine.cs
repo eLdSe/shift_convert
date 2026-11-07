@@ -85,20 +85,20 @@ public static class ConvertEngine
             var lime = Color.FromRgb(0xC6, 0xF2, 0x4E);
             var allImgOptions = new List<ConvertOption>
             {
-                new() { Key = "png", Label = "PNG", SubLabel = Loc.T("Без потерь", "Lossless", "Kayıpsız"), Icon = "\uEB9F", Accent = lime },
-                new() { Key = "jpg", Label = "JPG", SubLabel = Loc.T("Фото 92%", "Photo 92%", "Foto 92%"), Icon = "\uE722", Accent = lime },
-                new() { Key = "webp", Label = "WEBP", SubLabel = Loc.T("Для веба", "Web Format", "Web Formatı"), Icon = "\uE774", Accent = lime },
-                new() { Key = "pdf", Label = "PDF", SubLabel = pdfSub, Icon = "\uEA90", Accent = lime },
-                new() { Key = "ocr", Label = "OCR", SubLabel = Loc.T("Текст с фото", "Extract Text", "Metni Al"), Icon = "\uE8EC", Accent = lime },
-                new() { Key = "compress", Label = Loc.T("Сжать", "Compress", "Sıkıştır"), SubLabel = Loc.T("Меньше МБ", "Smaller size", "Küçült"), Icon = "\uE740", Accent = lime },
-                new() { Key = "ico", Label = "ICO", SubLabel = Loc.T("Иконка", "App Icon", "Simge"), Icon = "\uE737", Accent = lime },
-                new() { Key = "square", Label = "1:1", SubLabel = Loc.T("Квадрат/Аватар", "Square Crop", "Kare Kırp"), Icon = "\uE7FB", Accent = lime },
-                new() { Key = "base64", Label = "Base64", SubLabel = Loc.T("Код Data-URI", "Data-URI Code", "Data-URI"), Icon = "\uE943", Accent = lime },
-                new() { Key = "grayscale", Label = Loc.T("Ч/Б", "B&W", "S/B"), SubLabel = Loc.T("Монохром", "Grayscale", "Gri Ton"), Icon = "\uE790", Accent = lime },
-                new() { Key = "zip", Label = "ZIP", SubLabel = Loc.T("В архив", "Archive", "Arşivle"), Icon = "\uF012", Accent = lime },
-                new() { Key = "bmp", Label = "BMP", SubLabel = Loc.T("Растр", "Bitmap", "Bitmap"), Icon = "\uEB9F", Accent = lime },
-                new() { Key = "gif", Label = "GIF", SubLabel = Loc.T("Кадр", "GIF Frame", "GIF Kare"), Icon = "\uE8B2", Accent = lime },
-                new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать", "To Clipboard", "Kopyala"), Icon = "\uE8C8", Accent = lime },
+                new() { Key = "png", Label = "PNG", SubLabel = Loc.T("Без потерь", "Lossless", "Kayıpsız"), Icon = "\uEB9F", Accent = Color.FromRgb(0x38, 0xBD, 0xF8) },
+                new() { Key = "jpg", Label = "JPG", SubLabel = Loc.T("Фото 92%", "Photo 92%", "Foto 92%"), Icon = "\uE722", Accent = Color.FromRgb(0xF5, 0x9E, 0x0B) },
+                new() { Key = "webp", Label = "WEBP", SubLabel = Loc.T("Для веба", "Web Format", "Web Formatı"), Icon = "\uE774", Accent = Color.FromRgb(0x34, 0xD3, 0x99) },
+                new() { Key = "pdf", Label = "PDF", SubLabel = pdfSub, Icon = "\uEA90", Accent = Color.FromRgb(0xF8, 0x71, 0x71) },
+                new() { Key = "ocr", Label = "OCR", SubLabel = Loc.T("Текст с фото", "Extract Text", "Metni Al"), Icon = "\uE8EC", Accent = Color.FromRgb(0x81, 0x8C, 0xF8) },
+                new() { Key = "compress", Label = Loc.T("Сжать", "Compress", "Sıkıştır"), SubLabel = Loc.T("Меньше МБ", "Smaller size", "Küçült"), Icon = "\uE740", Accent = Color.FromRgb(0x10, 0xB9, 0x81) },
+                new() { Key = "ico", Label = "ICO", SubLabel = Loc.T("Иконка", "App Icon", "Simge"), Icon = "\uE737", Accent = Color.FromRgb(0xA7, 0x8B, 0xFA) },
+                new() { Key = "square", Label = "1:1", SubLabel = Loc.T("Квадрат/Аватар", "Square Crop", "Kare Kırp"), Icon = "\uE7FB", Accent = Color.FromRgb(0xC6, 0xF2, 0x4E) },
+                new() { Key = "base64", Label = "Base64", SubLabel = Loc.T("Код Data-URI", "Data-URI Code", "Data-URI"), Icon = "\uE943", Accent = Color.FromRgb(0xF4, 0x72, 0xB6) },
+                new() { Key = "grayscale", Label = Loc.T("Ч/Б", "B&W", "S/B"), SubLabel = Loc.T("Монохром", "Grayscale", "Gri Ton"), Icon = "\uE790", Accent = Color.FromRgb(0x94, 0xA3, 0xB8) },
+                new() { Key = "zip", Label = "ZIP", SubLabel = Loc.T("В архив", "Archive", "Arşivle"), Icon = "\uF012", Accent = Color.FromRgb(0xFB, 0x92, 0x3C) },
+                new() { Key = "bmp", Label = "BMP", SubLabel = Loc.T("Растр", "Bitmap", "Bitmap"), Icon = "\uEB9F", Accent = Color.FromRgb(0x38, 0xBD, 0xF8) },
+                new() { Key = "gif", Label = "GIF", SubLabel = Loc.T("Кадр", "GIF Frame", "GIF Kare"), Icon = "\uE8B2", Accent = Color.FromRgb(0xC0, 0x84, 0xFC) },
+                new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать", "To Clipboard", "Kopyala"), Icon = "\uE8C8", Accent = Color.FromRgb(0xE2, 0xE8, 0xF0) },
             };
 
             bool sameExt = files.All(f => string.Equals(Path.GetExtension(f), ext, StringComparison.OrdinalIgnoreCase));
@@ -125,9 +125,9 @@ public static class ConvertEngine
         {
             var vidList = new List<ConvertOption>
             {
-                new() { Key = "mp3", Label = "MP3", SubLabel = Loc.T("Извлечь звук", "Extract Audio", "Sesi Çıkart"), Icon = "\uE8D6", Accent = accentLime },
-                new() { Key = "vid_compress", Label = Loc.T("Сжать", "Compress", "Sıkıştır"), SubLabel = Loc.T("Меньше МБ (720p)", "Smaller 720p", "Küçült 720p"), Icon = "\uE740", Accent = accentLime },
-                new() { Key = "vid_enhance", Label = Loc.T("Улучшить", "Enhance", "İyileştir"), SubLabel = Loc.T("Чёткость HD 1080p", "HD 1080p Clarity", "HD 1080p Netlik"), Icon = "\uE790", Accent = accentLime },
+                new() { Key = "mp3", Label = "MP3", SubLabel = Loc.T("Извлечь звук", "Extract Audio", "Sesi Çıkart"), Icon = "\uE8D6", Accent = Color.FromRgb(0xC6, 0xF2, 0x4E) },
+                new() { Key = "vid_compress", Label = Loc.T("Сжать", "Compress", "Sıkıştır"), SubLabel = Loc.T("Меньше МБ (720p)", "Smaller 720p", "Küçült 720p"), Icon = "\uE740", Accent = Color.FromRgb(0x34, 0xD3, 0x99) },
+                new() { Key = "vid_enhance", Label = Loc.T("Улучшить", "Enhance", "İyileştir"), SubLabel = Loc.T("Чёткость HD 1080p", "HD 1080p Clarity", "HD 1080p Netlik"), Icon = "\uE790", Accent = Color.FromRgb(0x38, 0xBD, 0xF8) },
             };
 
             if (files.Count >= 2)
@@ -138,7 +138,7 @@ public static class ConvertEngine
                     Label = "MP4",
                     SubLabel = Loc.T($"Склеить {files.Count} видео", $"Merge {files.Count} videos", $"{files.Count} birleştir"),
                     Icon = "\uE714",
-                    Accent = accentLime
+                    Accent = Color.FromRgb(0x60, 0xA5, 0xFA)
                 });
             }
             else if (!string.Equals(ext, ".mp4", StringComparison.OrdinalIgnoreCase))
@@ -149,16 +149,16 @@ public static class ConvertEngine
                     Label = "MP4",
                     SubLabel = Loc.T("Универсальный H.264", "Universal H.264", "Evrensel MP4"),
                     Icon = "\uE714",
-                    Accent = accentLime
+                    Accent = Color.FromRgb(0x60, 0xA5, 0xFA)
                 });
             }
 
-            vidList.Add(new() { Key = "vid_gif", Label = "GIF", SubLabel = Loc.T("Анимация из видео", "Animated GIF", "Animasyon GIF"), Icon = "\uE8B2", Accent = accentLime });
-            vidList.Add(new() { Key = "vid_mute", Label = Loc.T("Без звука", "Mute", "Sessiz"), SubLabel = Loc.T("Убрать микрофон", "Strip Audio", "Sesi Kaldır"), Icon = "\uE74F", Accent = accentLime });
-            vidList.Add(new() { Key = "vid_frame", Label = Loc.T("Кадр PNG", "Frame PNG", "Kare PNG"), SubLabel = Loc.T("Выбрать кадр", "Choose Frame", "Kare Seç"), Icon = "\uEB9F", Accent = accentLime });
-            vidList.Add(new() { Key = "zip", Label = "ZIP", SubLabel = Loc.T("В архив", "Archive", "Arşivle"), Icon = "\uF012", Accent = accentLime });
-            vidList.Add(new() { Key = "sha256", Label = "SHA-256", SubLabel = Loc.T("Хеш файла", "Copy Hash", "Hash Kopyala"), Icon = "\uE72E", Accent = accentLime });
-            vidList.Add(new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать", "To Clipboard", "Kopyala"), Icon = "\uE8C8", Accent = accentLime });
+            vidList.Add(new() { Key = "vid_gif", Label = "GIF", SubLabel = Loc.T("Анимация из видео", "Animated GIF", "Animasyon GIF"), Icon = "\uE8B2", Accent = Color.FromRgb(0xC0, 0x84, 0xFC) });
+            vidList.Add(new() { Key = "vid_mute", Label = Loc.T("Без звука", "Mute", "Sessiz"), SubLabel = Loc.T("Убрать микрофон", "Strip Audio", "Sesi Kaldır"), Icon = "\uE74F", Accent = Color.FromRgb(0xFB, 0xBF, 0x24) });
+            vidList.Add(new() { Key = "vid_frame", Label = Loc.T("Кадр PNG", "Frame PNG", "Kare PNG"), SubLabel = Loc.T("Выбрать кадр", "Choose Frame", "Kare Seç"), Icon = "\uEB9F", Accent = Color.FromRgb(0x2D, 0xD4, 0xBF) });
+            vidList.Add(new() { Key = "zip", Label = "ZIP", SubLabel = Loc.T("В архив", "Archive", "Arşivle"), Icon = "\uF012", Accent = Color.FromRgb(0xFB, 0x92, 0x3C) });
+            vidList.Add(new() { Key = "sha256", Label = "SHA-256", SubLabel = Loc.T("Хеш файла", "Copy Hash", "Hash Kopyala"), Icon = "\uE72E", Accent = Color.FromRgb(0x94, 0xA3, 0xB8) });
+            vidList.Add(new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать", "To Clipboard", "Kopyala"), Icon = "\uE8C8", Accent = Color.FromRgb(0xE2, 0xE8, 0xF0) });
 
             return forWheel && vidList.Count > 8 ? vidList.Take(8).ToList() : vidList;
         }

@@ -1172,7 +1172,7 @@ public sealed class HubWindow : Window
                 Text = opt.Icon,
                 FontFamily = IconFont,
                 FontSize = 12,
-                Foreground = AccentLime,
+                Foreground = new SolidColorBrush(opt.Accent),
                 VerticalAlignment = VerticalAlignment.Center,
                 Margin = new Thickness(0, 0, 6, 0)
             };
@@ -1191,7 +1191,7 @@ public sealed class HubWindow : Window
             pill.MouseEnter += (_, _) =>
             {
                 pill.Background = BgRaisedHover;
-                pill.BorderBrush = AccentLime;
+                pill.BorderBrush = new SolidColorBrush(opt.Accent);
             };
             pill.MouseLeave += (_, _) =>
             {

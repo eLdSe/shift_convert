@@ -799,25 +799,26 @@ public sealed class RadialWheelWindow : Window
         for (int i = 0; i < _sectorPaths.Count; i++)
         {
             bool active = (i == idx);
+            var opt = _options[i];
             _sectorPaths[i].Fill = active
-                ? new SolidColorBrush(LimeSoftBg)
+                ? new SolidColorBrush(Color.FromArgb(0x40, opt.Accent.R, opt.Accent.G, opt.Accent.B))
                 : new SolidColorBrush(Color.FromRgb(0x13, 0x13, 0x13));
             _sectorPaths[i].Stroke = active
-                ? new SolidColorBrush(LimeColor)
+                ? new SolidColorBrush(opt.Accent)
                 : new SolidColorBrush(Color.FromRgb(0x24, 0x24, 0x24));
-            _sectorPaths[i].StrokeThickness = active ? 1.6 : 1.0;
+            _sectorPaths[i].StrokeThickness = active ? 1.8 : 1.0;
 
             if (i < _sectorIcons.Count)
             {
                 _sectorIcons[i].Foreground = active
-                    ? new SolidColorBrush(LimeColor)
+                    ? new SolidColorBrush(opt.Accent)
                     : new SolidColorBrush(Color.FromRgb(0xB4, 0xB4, 0xB4));
             }
             if (i < _sectorLabels.Count)
             {
                 _sectorLabels[i].Foreground = active
-                    ? new SolidColorBrush(LimeColor)
-                    : Brushes.White;
+                    ? Brushes.White
+                    : new SolidColorBrush(Color.FromRgb(0x8A, 0x8A, 0x8A));
             }
         }
 
@@ -825,11 +826,11 @@ public sealed class RadialWheelWindow : Window
         {
             var opt = _options[idx];
             _centerIconText.Text = opt.Icon;
-            _centerIconText.Foreground = new SolidColorBrush(LimeColor);
+            _centerIconText.Foreground = new SolidColorBrush(opt.Accent);
             _centerTitleText.Text = opt.Label;
-            _centerTitleText.Foreground = new SolidColorBrush(LimeColor);
+            _centerTitleText.Foreground = new SolidColorBrush(opt.Accent);
             _centerSubText.Text = opt.SubLabel;
-            _centerHub.BorderBrush = new SolidColorBrush(LimeColor);
+            _centerHub.BorderBrush = new SolidColorBrush(opt.Accent);
         }
         else
         {
