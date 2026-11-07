@@ -47,6 +47,7 @@ artifacts/
 launchSettings.json
 
 # OS generated files
+*.dll
 Thumbs.db
 ehthumbs.db
 Desktop.ini

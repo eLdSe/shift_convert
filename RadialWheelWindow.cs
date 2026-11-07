@@ -260,7 +260,7 @@ public sealed class RadialWheelWindow : Window
     private const int VK_RBUTTON = 0x02;
     private const int VK_ESCAPE = 0x1B;
 
-    public static void TryShowAtCursor(int screenPxX, int screenPxY)
+    public static void TryShowAtCursor(int screenPxX, int screenPxY, bool isOneShot = false)
     {
         if (_active != null) return;
         if (Environment.TickCount64 - _lastCloseTicks < 350) return;
@@ -270,7 +270,7 @@ public sealed class RadialWheelWindow : Window
             if (_active != null) return;
             try
             {
-                var win = new RadialWheelWindow(screenPxX, screenPxY, null, false);
+                var win = new RadialWheelWindow(screenPxX, screenPxY, null, isOneShot);
                 _active = win;
                 win.Show();
                 mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
@@ -278,6 +278,7 @@ public sealed class RadialWheelWindow : Window
             catch
             {
                 _active = null;
+                if (isOneShot) Application.Current?.Shutdown();
             }
         });
     }

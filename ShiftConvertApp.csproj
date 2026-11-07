@@ -26,10 +26,17 @@
 
     <DebugType>none</DebugType>
     <DebugSymbols>false</DebugSymbols>
+    <DefaultItemExcludes>$(DefaultItemExcludes);ShellExt\**</DefaultItemExcludes>
   </PropertyGroup>
+
+  <Target Name="CompileExplorerShellExt" BeforeTargets="BeforeBuild;PrepareResourceNames">
+    <MakeDir Directories="$(BaseIntermediateOutputPath)" />
+    <Exec Command="&quot;$(WINDIR)\Microsoft.NET\Framework64\v4.0.30319\csc.exe&quot; /nologo /target:library /platform:x64 /optimize+ /out:&quot;$(BaseIntermediateOutputPath)ShiftConvertShellExt.dll&quot; &quot;$(MSBuildProjectDirectory)\ShellExt\ShiftConvertShellExt.cs&quot;" />
+  </Target>
 
   <ItemGroup>
     <Resource Include="app.ico" />
+    <EmbeddedResource Include="$(BaseIntermediateOutputPath)ShiftConvertShellExt.dll" LogicalName="ShiftConvertShellExt.dll" />
   </ItemGroup>
 
 </Project>
