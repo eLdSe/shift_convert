@@ -15,8 +15,7 @@ bld/
 [Ll]ogs/
 *.log
 
-# Publish & distribution outputs
-publish/
+# Publish & distribution outputs (keep publish/ShiftConvert.exe tracked)
 publish_*/
 installer/
 *.zip

@@ -6,11 +6,10 @@
 
 ---
 
-## 📥 Скачать
+## 📥 Скачать готовое приложение
 
-👉 **[Скачать последний релиз `ShiftConvert.exe` (GitHub Releases)](https://github.com/eLdSe/shift_convert/releases/latest)**
-
-*Приложение собрано в один самодостаточный файл (`ShiftConvert.exe`) и не требует установки .NET Runtime.*
+👉 **[Скачать `ShiftConvert.exe` напрямую (Портативная версия, не требует .NET)](https://github.com/eLdSe/shift_convert/raw/main/publish/ShiftConvert.exe)**  
+*(Файл также лежит в папке [`publish/ShiftConvert.exe`](publish/ShiftConvert.exe) в этом репозитории и в разделе [GitHub Releases](https://github.com/eLdSe/shift_convert/releases/latest)).*
 
 ---
 
