@@ -1,0 +1,55 @@
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Ww][Ii][Nn]32/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.log
+
+# Publish & distribution outputs
+publish/
+publish_*/
+installer/
+*.zip
+*.7z
+*.rar
+*.nupkg
+*.snupkg
+
+# WPF temporary files
+*_wpftmp.csproj
+*_wpftmp.csproj.*
+*.tmp_proj
+
+# Visual Studio / Rider / VS Code / Antigravity
+.vs/
+.vscode/
+.idea/
+.gemini/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+# .NET Core / NuGet
+project.lock.json
+project.fragment.lock.json
+artifacts/
+launchSettings.json
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
