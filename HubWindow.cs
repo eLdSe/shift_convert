@@ -89,11 +89,8 @@ public sealed class HubWindow : Window
     }
 
     private IntPtr _hwnd;
-    private uint _wakeMsg;
-    private bool _trayAdded;
     private bool _isExplicitExit;
     private int _activeTab; // 0 = Обзор, 1 = Настройки
-    private NOTIFYICONDATA _nid;
 
     // Сайдбар
     private readonly TextBlock _brandScopeText;
@@ -153,6 +150,11 @@ public sealed class HubWindow : Window
     private readonly Border _setShiftSwitch = null!;
     private readonly Border _setShiftKnob = null!;
 
+    private readonly TextBlock _setCtxTitle = null!;
+    private readonly TextBlock _setCtxDesc = null!;
+    private readonly Border _setCtxSwitch = null!;
+    private readonly Border _setCtxKnob = null!;
+
     private readonly TextBlock _setClipTitle = null!;
     private readonly TextBlock _setClipDesc = null!;
     private readonly Border _setClipSwitch = null!;
@@ -180,6 +182,11 @@ public sealed class HubWindow : Window
         Title = "ShiftConvert";
         Width = 780;
         Height = 540;
+        try
+        {
+            Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri("pack://application:,,,/app.ico"));
+        }
+        catch { }
         WindowStyle = WindowStyle.None;
         AllowsTransparency = true;
         Background = Brushes.Transparent;
@@ -814,6 +821,18 @@ public sealed class HubWindow : Window
         settingsRowsStack.Children.Add(new Border { Height = 1, Background = RuleHairline });
 
         settingsRowsStack.Children.Add(CreateSettingRow(
+            out _setCtxTitle, out _setCtxDesc, out _setCtxSwitch, out _setCtxKnob,
+            () =>
+            {
+                bool next = !AppConfig.IsContextMenuEnabled();
+                AppConfig.Data.ContextMenuEnabled = next;
+                AppConfig.SetContextMenu(next);
+                AppConfig.Save();
+                RefreshAllStateUI();
+            }));
+        settingsRowsStack.Children.Add(new Border { Height = 1, Background = RuleHairline });
+
+        settingsRowsStack.Children.Add(CreateSettingRow(
             out _setClipTitle, out _setClipDesc, out _setClipSwitch, out _setClipKnob,
             () =>
             {
@@ -961,7 +980,7 @@ public sealed class HubWindow : Window
 
     /// <summary>
     /// Перехватываем системное закрытие (Alt+F4 / закрытие с панели задач):
-    /// если не нажата явная кнопка «Выключить», приложение уходит в фоновый режим.
+    /// если не нажата явная кнопка «Выключить», окно полностью выгружается из памяти в спящий режим.
     /// </summary>
     protected override void OnClosing(CancelEventArgs e)
     {
@@ -974,14 +993,18 @@ public sealed class HubWindow : Window
         base.OnClosing(e);
     }
 
+    public void ForceCloseForSleep()
+    {
+        _isExplicitExit = true;
+        try { Close(); } catch { }
+    }
+
     /// <summary>
     /// Полное выключение фонового процесса ShiftConvert.
     /// </summary>
     public void QuitApp()
     {
-        _isExplicitExit = true;
-        DisposeTray();
-        Application.Current.Shutdown();
+        App.QuitApplication();
     }
 
     private void SwitchTab(int tabIndex)
@@ -1005,124 +1028,14 @@ public sealed class HubWindow : Window
     {
         base.OnSourceInitialized(e);
         _hwnd = new WindowInteropHelper(this).Handle;
-        _wakeMsg = NativeMethods.RegisterWindowMessage("ShiftConvert_WakeHub_Msg");
-
-        var src = HwndSource.FromHwnd(_hwnd);
-        src?.AddHook(WndProc);
-
-        InitTrayIcon();
-    }
-
-    private void InitTrayIcon()
-    {
-        if (_trayAdded || _hwnd == IntPtr.Zero) return;
-
-        IntPtr hIcon = IntPtr.Zero;
-        try
-        {
-            string exePath = Environment.ProcessPath ?? "";
-            if (!string.IsNullOrEmpty(exePath) && File.Exists(exePath))
-            {
-                ushort idx = 0;
-                hIcon = ExtractAssociatedIcon(IntPtr.Zero, exePath, ref idx);
-            }
-        }
-        catch { }
-
-        if (hIcon == IntPtr.Zero)
-        {
-            hIcon = LoadIcon(IntPtr.Zero, new IntPtr(32512));
-        }
-
-        _nid = new NOTIFYICONDATA
-        {
-            cbSize = Marshal.SizeOf<NOTIFYICONDATA>(),
-            hWnd = _hwnd,
-            uID = 1001,
-            uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP,
-            uCallbackMessage = WM_TRAYICON,
-            hIcon = hIcon,
-            szTip = "ShiftConvert — Drag file + Press Shift"
-        };
-
-        _trayAdded = Shell_NotifyIcon(NIM_ADD, ref _nid);
     }
 
     public void DisposeTray()
     {
-        if (_trayAdded)
+        if (Application.Current is App app)
         {
-            _trayAdded = false;
-            try { Shell_NotifyIcon(NIM_DELETE, ref _nid); } catch { }
+            app.DisposeTray();
         }
-    }
-
-    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-    {
-        if (_wakeMsg != 0 && (uint)msg == _wakeMsg)
-        {
-            ShowHub();
-            handled = true;
-        }
-        else if (msg == WM_TRAYICON)
-        {
-            int ev = lParam.ToInt32() & 0xFFFF;
-            if (ev is WM_LBUTTONUP or WM_LBUTTONDBLCLK)
-            {
-                if (IsVisible) HideToTray();
-                else ShowHub();
-                handled = true;
-            }
-            else if (ev == WM_RBUTTONUP)
-            {
-                ShowTrayContextMenu();
-                handled = true;
-            }
-        }
-        return IntPtr.Zero;
-    }
-
-    private void ShowTrayContextMenu()
-    {
-        var menu = new ContextMenu();
-        var openItem = new MenuItem { Header = Loc.T("Открыть ShiftConvert", "Open ShiftConvert", "ShiftConvert'i Aç") };
-        openItem.Click += (_, _) => ShowHub();
-
-        var shiftItem = new MenuItem
-        {
-            Header = Loc.T("Колесо по клавише Shift", "Radial Wheel on Shift", "Shift Tekerleği"),
-            IsCheckable = true,
-            IsChecked = AppConfig.Data.HoldShiftEnabled
-        };
-        shiftItem.Click += (_, _) =>
-        {
-            AppConfig.Data.HoldShiftEnabled = !AppConfig.Data.HoldShiftEnabled;
-            AppConfig.Save();
-            RefreshAllStateUI();
-        };
-
-        var autoItem = new MenuItem
-        {
-            Header = Loc.T("Запускать вместе с Windows", "Launch at Windows Startup", "Windows ile Başlat"),
-            IsCheckable = true,
-            IsChecked = AppConfig.IsAutoStartEnabled()
-        };
-        autoItem.Click += (_, _) =>
-        {
-            AppConfig.SetAutoStart(!AppConfig.IsAutoStartEnabled());
-            RefreshAllStateUI();
-        };
-
-        var exitItem = new MenuItem { Header = Loc.T("Выключить полностью", "Quit ShiftConvert", "Tamamen Kapat") };
-        exitItem.Click += (_, _) => QuitApp();
-
-        menu.Items.Add(openItem);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(shiftItem);
-        menu.Items.Add(autoItem);
-        menu.Items.Add(new Separator());
-        menu.Items.Add(exitItem);
-        menu.IsOpen = true;
     }
 
     public void SetConvertingState(bool isConverting, IReadOnlyList<string> files, ConvertOption opt)
@@ -1175,9 +1088,7 @@ public sealed class HubWindow : Window
 
     public void HideToTray()
     {
-        ShowInTaskbar = false;
-        Hide();
-        MemoryOptimizer.ScheduleTrim(600);
+        App.UnloadHubToSleepMode();
     }
 
     private void OnDropZoneClick(object sender, MouseButtonEventArgs e)
@@ -1358,9 +1269,15 @@ public sealed class HubWindow : Window
 
         _setShiftTitle.Text = Loc.T("Радиальное колесо при зажатии Shift", "Radial wheel on Shift key", "Shift tuşuyla radyal tekerlek");
         _setShiftDesc.Text = Loc.T(
-            "Открывать круговое меню форматов, когда вы перетаскиваете файл мышью и нажимаете клавишу Shift",
-            "Open the radial format selector when dragging any file and pressing Shift",
-            "Bir dosyayı sürüklerken Shift'e basıldığında dairesel menüyü aç");
+            "Открывать круговое меню форматов при перетаскивании файла с клавишей Shift (в спящем режиме ~3 МБ ОЗУ)",
+            "Open the radial format selector when dragging any file + Shift (sleep mode ~3 MB RAM)",
+            "Dosyayı sürüklerken Shift'e basıldığında dairesel menüyü aç (~3 MB RAM)");
+
+        _setCtxTitle.Text = Loc.T("Меню правой кнопки мыши (ПКМ в Проводнике)", "Explorer right-click context menu", "Dosya Gezgini sağ tık menüsü");
+        _setCtxDesc.Text = Loc.T(
+            "Пункт «⚡ ShiftConvert» при клике ПКМ по файлу или папке — работает даже когда приложение полностью выключено",
+            "Add '⚡ ShiftConvert' to right-click menu — works on-demand even when background process is quit",
+            "Sağ tık menüsüne '⚡ ShiftConvert' ekle — uygulama tamamen kapalıyken bile çalışır");
 
         _setClipTitle.Text = Loc.T("Автокопирование результата в буфер (Ctrl+V)", "Auto-copy converted file to clipboard (Ctrl+V)", "Sonucu otomatik panoya kopyala (Ctrl+V)");
         _setClipDesc.Text = Loc.T(
@@ -1374,19 +1291,19 @@ public sealed class HubWindow : Window
             "Show a compact pill notification for 3 seconds after conversion completes",
             "Dönüştürme tamamlandığında 3 saniyelik bildirim göster");
 
-        _setAutoTitle.Text = Loc.T("Запускать в фоне вместе с Windows", "Start silently with Windows", "Windows ile arka planda başlat");
+        _setAutoTitle.Text = Loc.T("Запускать в спящем режиме вместе с Windows", "Start in sleep mode with Windows", "Windows ile uyku modunda başlat");
         _setAutoDesc.Text = Loc.T(
-            "Автоматически запускать ShiftConvert в системном трее при входе в систему (0% CPU в простое)",
-            "Automatically launch ShiftConvert in the system tray on sign-in (0% idle CPU)",
-            "Oturum açıldığında ShiftConvert'i sistem tepsisinde başlat (boşta %0 CPU)");
+            "Запускать только микро-слушатель Shift без создания окна (0% CPU, ~3 МБ ОЗУ)",
+            "Start only the micro Shift listener without creating UI window (0% CPU, ~3 MB RAM)",
+            "Pencere oluşturmadan yalnızca mikro Shift dinleyicisini başlat (%0 CPU, ~3 MB RAM)");
 
-        _powerCardTitle.Text = Loc.T("Фоновый режим и питание процесса", "Background mode & process power", "Arka plan modu ve süreç kontrolü");
+        _powerCardTitle.Text = Loc.T("Спящий режим и полное выключение", "Sleep mode & full shutdown", "Uyku modu ve tamamen kapatma");
         _powerCardDesc.Text = Loc.T(
-            "Нажатие на крестик (✕) закрывает только окно, чтобы колесо Shift всегда срабатывало в Проводнике. Чтобы полностью выгрузить приложение из памяти, нажмите «Выключить».",
-            "Clicking Close (✕) only hides the window so the Shift wheel stays ready in Explorer. Use 'Quit ShiftConvert' to completely terminate the process.",
-            "Kapat (✕) düğmesi yalnızca pencereyi gizler. Süreci tamamen sonlandırmak için 'Tamamen Kapat' düğmesini kullanın.");
-        _hideToBgBtnLabel.Text = Loc.T("Свернуть в фон", "Hide to background", "Arka plana gizle");
-        _quitFullBtnLabel.Text = Loc.T("Выключить полностью", "Quit ShiftConvert", "Tamamen Kapat");
+            "Крестик (✕) полностью выгружает окно из памяти в спящий режим (работает Shift). «Выключить» завершает процесс (остаётся работать меню ПКМ).",
+            "Close (✕) unloads the window into sleep mode (Shift works). 'Quit' terminates the process (Right-Click menu still works).",
+            "Kapat (✕) pencereyi bellekten kaldırır (Shift çalışır). 'Kapat' süreci sonlandırır (Sağ tık menüsü çalışmaya devam eder).");
+        _hideToBgBtnLabel.Text = Loc.T("В спящий режим", "Sleep mode", "Uyku modu");
+        _quitFullBtnLabel.Text = Loc.T("Выключить полностью", "Quit process", "Tamamen kapat");
 
         RefreshAllStateUI();
         RefreshHistoryUI();
@@ -1397,8 +1314,8 @@ public sealed class HubWindow : Window
         bool shiftOn = AppConfig.Data.HoldShiftEnabled;
         _bgStatusDot.Fill = shiftOn ? AccentLime : TextFaint;
         _bgStatusText.Text = shiftOn
-            ? Loc.T("В фоне · 0.0% CPU", "Active · 0.0% CPU", "Aktif · 0.0% CPU")
-            : Loc.T("Хук на паузе", "Hook paused", "Duraklatıldı");
+            ? Loc.T("Спящий хук · 0% CPU", "Sleep hook · 0% CPU", "Uyku kancası · %0 CPU")
+            : Loc.T("Только ПКМ", "Right-click only", "Sadece sağ tık");
 
         int totalCount = Math.Max(AppConfig.Data.TotalConvertedCount, AppConfig.Data.History.Count);
         _kpiConvertedLabel.Text = Loc.T("Сконвертировано файлов", "Files converted", "Dönüştürülen dosya");
@@ -1410,14 +1327,15 @@ public sealed class HubWindow : Window
         _kpiSavedValue.Foreground = AppConfig.Data.TotalSavedBytes > 0 ? AccentLime : TextPrimary;
         _kpiSavedSub.Text = Loc.T("Сжатие и WebP/ZIP", "Compression & WebP/ZIP", "Sıkıştırma & WebP/ZIP");
 
-        _kpiHookLabel.Text = Loc.T("Перехват клавиши Shift", "Shift drag hook", "Shift yakalayıcı");
+        _kpiHookLabel.Text = Loc.T("Режим вызова", "Trigger mode", "Tetikleme modu");
         _kpiHookValue.Text = shiftOn
-            ? Loc.T("Активен", "Active", "Aktif")
-            : Loc.T("Пауза", "Paused", "Duraklatıldı");
-        _kpiHookValue.Foreground = shiftOn ? AccentLime : TextMuted;
-        _kpiHookSub.Text = Loc.T("Крестик ✕ убирает в трей", "Close ✕ hides to tray", "✕ tepsiye gizler");
+            ? Loc.T("Shift + ПКМ", "Shift + Menu", "Shift + Menü")
+            : Loc.T("Только ПКМ", "Right-Click", "Sağ Tık");
+        _kpiHookValue.Foreground = shiftOn ? AccentLime : TextPrimary;
+        _kpiHookSub.Text = Loc.T("Окно выгружается в фоне", "UI unloads when closed", "Pencere bellekte tutulmaz");
 
         UpdateSwitchVisual(_setShiftSwitch, _setShiftKnob, shiftOn);
+        UpdateSwitchVisual(_setCtxSwitch, _setCtxKnob, AppConfig.IsContextMenuEnabled());
         UpdateSwitchVisual(_setClipSwitch, _setClipKnob, AppConfig.Data.AutoCopyClipboard);
         UpdateSwitchVisual(_setToastSwitch, _setToastKnob, AppConfig.Data.ShowToast);
         UpdateSwitchVisual(_setAutoSwitch, _setAutoKnob, AppConfig.IsAutoStartEnabled());
@@ -1811,7 +1729,7 @@ public sealed class HubWindow : Window
     {
         var row = new Grid
         {
-            Margin = new Thickness(0, 12, 0, 12),
+            Margin = new Thickness(0, 9, 0, 9),
             Background = Brushes.Transparent,
             Cursor = Cursors.Hand
         };

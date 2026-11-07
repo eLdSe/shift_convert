@@ -236,6 +236,8 @@ public sealed class RadialWheelWindow : Window
     private string[] _draggedFiles = Array.Empty<string>();
     private int _hoveredIndex = -1;
     private bool _confirmedFileDrag;
+    private bool _isClickMode;
+    private bool _isOneShot;
     private bool _isClosing;
 
     [DllImport("user32.dll")]
@@ -244,8 +246,18 @@ public sealed class RadialWheelWindow : Window
     [DllImport("user32.dll")]
     private static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetDC(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern int ReleaseDC(IntPtr hWnd, IntPtr hDC);
+
+    [DllImport("gdi32.dll")]
+    private static extern int GetDeviceCaps(IntPtr hdc, int nIndex);
+
     private const uint MOUSEEVENTF_MOVE = 0x0001;
     private const int VK_LBUTTON = 0x01;
+    private const int VK_RBUTTON = 0x02;
     private const int VK_ESCAPE = 0x1B;
 
     public static void TryShowAtCursor(int screenPxX, int screenPxY)
@@ -258,7 +270,7 @@ public sealed class RadialWheelWindow : Window
             if (_active != null) return;
             try
             {
-                var win = new RadialWheelWindow(screenPxX, screenPxY);
+                var win = new RadialWheelWindow(screenPxX, screenPxY, null, false);
                 _active = win;
                 win.Show();
                 mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
@@ -270,8 +282,37 @@ public sealed class RadialWheelWindow : Window
         });
     }
 
-    private RadialWheelWindow(int screenPxX, int screenPxY)
+    public static void ShowForFilesAtCursor(string[] files, int screenPxX, int screenPxY, bool isOneShot)
     {
+        if (files == null || files.Length == 0)
+        {
+            if (isOneShot) Application.Current?.Shutdown();
+            return;
+        }
+
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            try { _active?.CloseWheel(suppressShutdown: true); } catch { }
+            try
+            {
+                var win = new RadialWheelWindow(screenPxX, screenPxY, files, isOneShot);
+                _active = win;
+                win.Show();
+                win.Activate();
+            }
+            catch
+            {
+                _active = null;
+                if (isOneShot) Application.Current?.Shutdown();
+            }
+        });
+    }
+
+    private RadialWheelWindow(int screenPxX, int screenPxY, string[]? preloadedFiles, bool isOneShot)
+    {
+        _isOneShot = isOneShot;
+        _isClickMode = preloadedFiles != null && preloadedFiles.Length > 0;
+
         Width = WheelSize;
         Height = WheelSize;
         WindowStyle = WindowStyle.None;
@@ -279,10 +320,11 @@ public sealed class RadialWheelWindow : Window
         Background = Brushes.Transparent;
         ShowInTaskbar = false;
         Topmost = true;
-        ShowActivated = false;
+        ShowActivated = _isClickMode;
         ResizeMode = ResizeMode.NoResize;
         AllowDrop = true;
-        Opacity = 0.01;
+        Opacity = _isClickMode ? 1.0 : 0.01;
+        if (_isClickMode) Cursor = Cursors.Hand;
 
         PositionAtScreenPixels(screenPxX, screenPxY);
 
@@ -375,9 +417,8 @@ public sealed class RadialWheelWindow : Window
         _probeTimer.Tick += (_, _) =>
         {
             _probeTimer.Stop();
-            if (!_confirmedFileDrag) CloseWheel();
+            if (!_confirmedFileDrag && !_isClickMode) CloseWheel();
         };
-        _probeTimer.Start();
 
         _safetyTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(90) };
         _safetyTimer.Tick += (_, _) =>
@@ -387,7 +428,7 @@ public sealed class RadialWheelWindow : Window
                 CloseWheel();
                 return;
             }
-            if (_confirmedFileDrag && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0)
+            if (!_isClickMode && _confirmedFileDrag && (GetAsyncKeyState(VK_LBUTTON) & 0x8000) == 0)
             {
                 _safetyTimer.Stop();
                 Dispatcher.InvokeAsync(async () =>
@@ -397,6 +438,66 @@ public sealed class RadialWheelWindow : Window
                 });
             }
         };
+
+        if (_isClickMode && preloadedFiles != null)
+        {
+            _confirmedFileDrag = true;
+            _draggedFiles = preloadedFiles;
+            _options = ConvertEngine.GetOptionsForFiles(preloadedFiles, forWheel: true);
+            BuildSectors();
+            SetHoveredSector(-1);
+            RevealWheelAnimation();
+            _safetyTimer.Start();
+
+            Deactivated += (_, _) =>
+            {
+                if (!_isClosing) CloseWheel();
+            };
+        }
+        else
+        {
+            _probeTimer.Start();
+        }
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        base.OnMouseMove(e);
+        if (_isClickMode)
+        {
+            UpdateHoverFromPoint(e.GetPosition(_rootGrid));
+        }
+    }
+
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseLeftButtonUp(e);
+        if (!_isClickMode) return;
+        e.Handled = true;
+
+        int chosenIndex = _hoveredIndex;
+        var files = _draggedFiles;
+        var options = _options;
+        bool oneShot = _isOneShot;
+
+        if (chosenIndex >= 0 && chosenIndex < options.Count && files.Length > 0)
+        {
+            CloseWheel(suppressShutdown: true);
+            ExecuteAndNotify(files, options[chosenIndex], shutdownOnComplete: oneShot);
+        }
+        else
+        {
+            CloseWheel();
+        }
+    }
+
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        base.OnKeyDown(e);
+        if (e.Key == Key.Escape)
+        {
+            CloseWheel();
+        }
     }
 
     private void PositionAtScreenPixels(int pxX, int pxY)
@@ -404,20 +505,28 @@ public sealed class RadialWheelWindow : Window
         double dpiX = 1.0, dpiY = 1.0;
         try
         {
-            if (App.Hub != null)
+            IntPtr hdc = GetDC(IntPtr.Zero);
+            if (hdc != IntPtr.Zero)
             {
-                var src = PresentationSource.FromVisual(App.Hub);
-                if (src?.CompositionTarget != null)
-                {
-                    dpiX = src.CompositionTarget.TransformToDevice.M11;
-                    dpiY = src.CompositionTarget.TransformToDevice.M22;
-                }
+                int logX = GetDeviceCaps(hdc, 88);
+                int logY = GetDeviceCaps(hdc, 90);
+                ReleaseDC(IntPtr.Zero, hdc);
+                if (logX > 0) dpiX = logX / 96.0;
+                if (logY > 0) dpiY = logY / 96.0;
             }
         }
         catch { }
 
-        Left = (pxX / dpiX) - Center;
-        Top = (pxY / dpiY) - Center;
+        double dipX = (pxX / dpiX) - Center;
+        double dipY = (pxY / dpiY) - Center;
+
+        double maxW = SystemParameters.VirtualScreenWidth;
+        double maxH = SystemParameters.VirtualScreenHeight;
+        double minX = SystemParameters.VirtualScreenLeft;
+        double minY = SystemParameters.VirtualScreenTop;
+
+        Left = Math.Clamp(dipX, minX + 8, minX + maxW - WheelSize - 8);
+        Top = Math.Clamp(dipY, minY + 8, minY + maxH - WheelSize - 8);
     }
 
     protected override void OnSourceInitialized(EventArgs e)
@@ -427,7 +536,10 @@ public sealed class RadialWheelWindow : Window
         {
             IntPtr hwnd = new WindowInteropHelper(this).Handle;
             int exStyle = NativeMethods.GetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE);
-            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
+            int addStyle = _isClickMode
+                ? NativeMethods.WS_EX_TOOLWINDOW
+                : (NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE);
+            NativeMethods.SetWindowLong(hwnd, NativeMethods.GWL_EXSTYLE, exStyle | addStyle);
         }
         catch { }
     }
@@ -509,17 +621,19 @@ public sealed class RadialWheelWindow : Window
         catch { }
     }
 
-    public static void ExecuteAndNotify(IReadOnlyList<string> files, ConvertOption opt)
+    public static void ExecuteAndNotify(IReadOnlyList<string> files, ConvertOption opt, bool shutdownOnComplete = false)
     {
         try { _activeCts?.Cancel(); } catch { }
         try { _activeCts?.Dispose(); } catch { }
         var cts = new CancellationTokenSource();
         _activeCts = cts;
 
+        bool showToast = AppConfig.Data.ShowToast || shutdownOnComplete || App.IsOneShotMode;
+
         Application.Current?.Dispatcher.Invoke(() =>
         {
             App.Hub?.SetConvertingState(true, files, opt);
-            if (AppConfig.Data.ShowToast)
+            if (showToast)
             {
                 FloatingToastWindow.ShowLoading(files, opt);
             }
@@ -535,7 +649,7 @@ public sealed class RadialWheelWindow : Window
                 {
                     if (cts.IsCancellationRequested) return;
                     App.Hub?.UpdateProgress(pct, files, opt);
-                    if (AppConfig.Data.ShowToast)
+                    if (showToast)
                     {
                         FloatingToastWindow.UpdateProgress(pct, opt);
                     }
@@ -558,9 +672,13 @@ public sealed class RadialWheelWindow : Window
             {
                 App.Hub?.SetConvertingState(false, files, opt);
                 App.Hub?.RefreshHistoryUI();
-                if (AppConfig.Data.ShowToast)
+                if (showToast)
                 {
                     FloatingToastWindow.CompleteToast(res, opt);
+                }
+                else if (shutdownOnComplete || App.IsOneShotMode)
+                {
+                    Application.Current?.Shutdown();
                 }
                 MemoryOptimizer.ScheduleTrim(2200);
             });
@@ -761,7 +879,7 @@ public sealed class RadialWheelWindow : Window
         return geo;
     }
 
-    private void CloseWheel()
+    private void CloseWheel(bool suppressShutdown = false)
     {
         if (_isClosing) return;
         _isClosing = true;
@@ -770,6 +888,11 @@ public sealed class RadialWheelWindow : Window
         _lastCloseTicks = Environment.TickCount64;
         if (_active == this) _active = null;
         try { Close(); } catch { }
+        if ((_isOneShot || App.IsOneShotMode) && !suppressShutdown)
+        {
+            Application.Current?.Shutdown();
+            return;
+        }
         MemoryOptimizer.ScheduleTrim(1500);
     }
 }
@@ -1109,6 +1232,11 @@ public sealed class FloatingToastWindow : Window
         _closeTimer.Stop();
         if (_current == this) _current = null;
         try { Close(); } catch { }
+        if (App.IsOneShotMode)
+        {
+            Application.Current?.Shutdown();
+            return;
+        }
         MemoryOptimizer.ScheduleTrim(1200);
     }
 }
