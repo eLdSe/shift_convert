@@ -155,7 +155,7 @@ public static class ConvertEngine
 
             vidList.Add(new() { Key = "vid_gif", Label = "GIF", SubLabel = Loc.T("Анимация из видео", "Animated GIF", "Animasyon GIF"), Icon = "\uE8B2", Accent = accentLime });
             vidList.Add(new() { Key = "vid_mute", Label = Loc.T("Без звука", "Mute", "Sessiz"), SubLabel = Loc.T("Убрать микрофон", "Strip Audio", "Sesi Kaldır"), Icon = "\uE74F", Accent = accentLime });
-            vidList.Add(new() { Key = "vid_frame", Label = Loc.T("Кадр PNG", "Frame PNG", "Kare PNG"), SubLabel = Loc.T("Обложка в буфер", "Cover to Clipboard", "Kapak Kopyala"), Icon = "\uEB9F", Accent = accentLime });
+            vidList.Add(new() { Key = "vid_frame", Label = Loc.T("Кадр PNG", "Frame PNG", "Kare PNG"), SubLabel = Loc.T("Выбрать кадр", "Choose Frame", "Kare Seç"), Icon = "\uEB9F", Accent = accentLime });
             vidList.Add(new() { Key = "zip", Label = "ZIP", SubLabel = Loc.T("В архив", "Archive", "Arşivle"), Icon = "\uF012", Accent = accentLime });
             vidList.Add(new() { Key = "sha256", Label = "SHA-256", SubLabel = Loc.T("Хеш файла", "Copy Hash", "Hash Kopyala"), Icon = "\uE72E", Accent = accentLime });
             vidList.Add(new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать", "To Clipboard", "Kopyala"), Icon = "\uE8C8", Accent = accentLime });
@@ -1371,17 +1371,46 @@ public static class ConvertEngine
     private static async Task<(string? OutputPath, BitmapSource? FrameBmp)> ExtractVideoFramePngAsync(string inputPath, Action<double>? onProgress, CancellationToken ct = default)
     {
         ct.ThrowIfCancellationRequested();
-        onProgress?.Invoke(20);
+        onProgress?.Invoke(10);
         var inSf = await Windows.Storage.StorageFile.GetFileFromPathAsync(inputPath);
         var clip = await Windows.Media.Editing.MediaClip.CreateFromFileAsync(inSf);
         var comp = new Windows.Media.Editing.MediaComposition();
         comp.Clips.Add(clip);
 
+        var vProps = clip.GetVideoEncodingProperties();
+        int srcW = (int)(vProps?.Width ?? 0);
+        int srcH = (int)(vProps?.Height ?? 0);
         double totalSec = comp.Duration.TotalSeconds;
-        double sampleSec = totalSec > 1.2 ? Math.Min(totalSec * 0.15, totalSec - 0.1) : Math.Max(0.0, totalSec * 0.5);
+
+        double? chosenSec = null;
+        if (Application.Current != null)
+        {
+            await Application.Current.Dispatcher.InvokeAsync(() =>
+            {
+                var picker = new VideoFramePickerWindow(inputPath, comp, totalSec, srcW, srcH);
+                if (picker.ShowDialog() == true)
+                {
+                    chosenSec = picker.SelectedSeconds;
+                }
+            });
+        }
+        else
+        {
+            chosenSec = totalSec > 1.2 ? Math.Min(totalSec * 0.15, totalSec - 0.1) : Math.Max(0.0, totalSec * 0.5);
+        }
+
+        if (!chosenSec.HasValue)
+        {
+            throw new OperationCanceledException("Выбор кадра отменён пользователем");
+        }
+
+        ct.ThrowIfCancellationRequested();
+        onProgress?.Invoke(50);
+
+        double targetSec = Math.Clamp(chosenSec.Value, 0.0, Math.Max(0.0, totalSec - 0.01));
 
         using var thumbStream = await comp.GetThumbnailAsync(
-            TimeSpan.FromSeconds(sampleSec),
+            TimeSpan.FromSeconds(targetSec),
             0,
             0,
             Windows.Media.Editing.VideoFramePrecision.NearestFrame);

@@ -628,7 +628,7 @@ public sealed class RadialWheelWindow : Window
         var cts = new CancellationTokenSource();
         _activeCts = cts;
 
-        bool showToast = AppConfig.Data.ShowToast || shutdownOnComplete || App.IsOneShotMode;
+        bool showToast = (AppConfig.Data.ShowToast || shutdownOnComplete || App.IsOneShotMode) && opt.Key != "vid_frame";
 
         Application.Current?.Dispatcher.Invoke(() =>
         {
