@@ -213,9 +213,14 @@ namespace ShiftConvertShellExt
         {
             try
             {
-                // Если основной процесс ShiftConvert уже запущен — он сам обработает Shift
+                // Если запущен основной ShiftConvert или запущен QuickNotch — они сами обрабатывают хук, не дублируем вызов
                 Mutex existingMutex;
                 if (Mutex.TryOpenExisting(@"Local\ShiftConvert_SingleInstance_v1", out existingMutex))
+                {
+                    existingMutex.Dispose();
+                    return;
+                }
+                if (Mutex.TryOpenExisting(@"Local\QuickNotch_AppMutex_v2", out existingMutex))
                 {
                     existingMutex.Dispose();
                     return;
