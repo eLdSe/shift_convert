@@ -57,6 +57,98 @@ public static class ConvertEngine
     public static bool IsTextFile(string path) => TextExts.Contains(Path.GetExtension(path));
     public static bool IsZipFile(string path) => string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);
 
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    public static string[] GetSelectedExplorerFiles()
+    {
+        var result = new List<string>();
+        try
+        {
+            IntPtr fgHwnd = GetForegroundWindow();
+            Type? shellType = Type.GetTypeFromProgID("Shell.Application");
+            if (shellType == null) return result.ToArray();
+
+            dynamic? shell = Activator.CreateInstance(shellType);
+            if (shell == null) return result.ToArray();
+
+            dynamic? windows = shell.Windows();
+            if (windows == null) return result.ToArray();
+
+            int count = Convert.ToInt32(windows.Count);
+
+            // 1. Проверяем активное окно Проводника
+            for (int i = 0; i < count; i++)
+            {
+                try
+                {
+                    dynamic item = windows.Item(i);
+                    if (item == null) continue;
+
+                    long itemHwnd = Convert.ToInt64(item.HWND);
+                    if (fgHwnd != IntPtr.Zero && itemHwnd == fgHwnd.ToInt64())
+                    {
+                        ExtractSelectedItemsFromBrowser(item, result);
+                        if (result.Count > 0) return result.ToArray();
+                    }
+                }
+                catch { }
+            }
+
+            // 2. Проверяем Рабочий стол (Progman / WorkerW / SysListView32)
+            try
+            {
+                dynamic desktopDisp = windows.FindWindowSW(0, 0, 8 /* SWC_DESKTOP */, 0, 1 /* SWFO_NEEDDISPATCH */);
+                if (desktopDisp != null)
+                {
+                    ExtractSelectedItemsFromBrowser(desktopDisp, result);
+                    if (result.Count > 0) return result.ToArray();
+                }
+            }
+            catch { }
+
+            // 3. Фолбэк по всем открытым окнам Explorer
+            for (int i = 0; i < count; i++)
+            {
+                try
+                {
+                    dynamic item = windows.Item(i);
+                    if (item == null) continue;
+                    ExtractSelectedItemsFromBrowser(item, result);
+                    if (result.Count > 0) return result.ToArray();
+                }
+                catch { }
+            }
+        }
+        catch { }
+        return result.ToArray();
+    }
+
+    private static void ExtractSelectedItemsFromBrowser(dynamic browserItem, List<string> output)
+    {
+        try
+        {
+            dynamic doc = browserItem.Document;
+            if (doc == null) return;
+            dynamic selectedItems = doc.SelectedItems();
+            if (selectedItems == null) return;
+
+            int selCount = Convert.ToInt32(selectedItems.Count);
+            for (int j = 0; j < selCount; j++)
+            {
+                dynamic fileItem = selectedItems.Item(j);
+                if (fileItem == null) continue;
+
+                string path = Convert.ToString(fileItem.Path);
+                if (!string.IsNullOrEmpty(path) && (File.Exists(path) || Directory.Exists(path)))
+                {
+                    output.Add(path);
+                }
+            }
+        }
+        catch { }
+    }
+
     public static List<ConvertOption> GetOptionsForFiles(IReadOnlyList<string> files, bool forWheel = true)
     {
         string first = files.FirstOrDefault() ?? "";

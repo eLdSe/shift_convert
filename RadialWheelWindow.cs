@@ -135,10 +135,10 @@ public static class GlobalDragHook
                     {
                         int dx = _lastMouseX - _dragStartX;
                         int dy = _lastMouseY - _dragStartY;
-                        if (dx * dx + dy * dy > 324) _dragThresholdMet = true;
+                        if (dx * dx + dy * dy >= 144) _dragThresholdMet = true; // >= 12px
                     }
 
-                    if (_dragThresholdMet && !_shiftHeldAtStart && !_wheelTriggeredThisDrag)
+                    if (_dragThresholdMet && !_wheelTriggeredThisDrag)
                     {
                         if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0)
                         {
@@ -177,7 +177,7 @@ public static class GlobalDragHook
 
     private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
     {
-        if (nCode >= 0 && _lButtonDown && _dragThresholdMet && !_shiftHeldAtStart && !_wheelTriggeredThisDrag && AppConfig.Data.HoldShiftEnabled)
+        if (nCode >= 0 && _lButtonDown && _dragThresholdMet && !_wheelTriggeredThisDrag && AppConfig.Data.HoldShiftEnabled)
         {
             int msg = (int)wParam;
             if (msg == WM_KEYDOWN || msg == WM_SYSKEYDOWN)
@@ -270,10 +270,18 @@ public sealed class RadialWheelWindow : Window
             if (_active != null) return;
             try
             {
+                var files = ConvertEngine.GetSelectedExplorerFiles();
+                if (files != null && files.Length > 0)
+                {
+                    ShowForFilesAtCursor(files, screenPxX, screenPxY, isOneShot);
+                    return;
+                }
+
                 var win = new RadialWheelWindow(screenPxX, screenPxY, null, isOneShot);
                 _active = win;
                 win.Show();
-                mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero);
+                mouse_event(MOUSEEVENTF_MOVE, 1, 1, 0, UIntPtr.Zero);
+                mouse_event(MOUSEEVENTF_MOVE, -1, -1, 0, UIntPtr.Zero);
             }
             catch
             {
@@ -414,7 +422,7 @@ public sealed class RadialWheelWindow : Window
 
         Content = _rootGrid;
 
-        _probeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
+        _probeTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
         _probeTimer.Tick += (_, _) =>
         {
             _probeTimer.Stop();

@@ -36,9 +36,7 @@ public partial class App : Application
         AppConfig.Load();
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
 
-        if (e.Args.Length > 0 &&
-            (string.Equals(e.Args[0], "--init-shellext", StringComparison.OrdinalIgnoreCase) ||
-             string.Equals(e.Args[0], "--tray", StringComparison.OrdinalIgnoreCase)))
+        if (e.Args.Length > 0 && string.Equals(e.Args[0], "--init-shellext", StringComparison.OrdinalIgnoreCase))
         {
             AppConfig.InstallAndActivateShellExtension(AppConfig.Data.HoldShiftEnabled);
             if (AppConfig.Data.ContextMenuEnabled)
@@ -115,7 +113,15 @@ public partial class App : Application
 
         InitLightweightTrayHost();
         GlobalDragHook.Initialize();
-        ShowOrCreateHub();
+        bool silent = e.Args.Length > 0 && string.Equals(e.Args[0], "--tray", StringComparison.OrdinalIgnoreCase);
+        if (!silent)
+        {
+            ShowOrCreateHub();
+        }
+        else
+        {
+            MemoryOptimizer.ScheduleTrim(400);
+        }
     }
 
     private static List<string> ParseCliFiles(string[] args, out string? directAction, out bool isDragWheel)
@@ -167,15 +173,23 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// При закрытии главного окна (✕) активирует встроенное расширение Проводника (ShiftConvertShellExt.dll)
-    /// и полностью завершает процесс ShiftConvert.exe (0 процессов в Диспетчере задач).
-    /// При этом перетаскивание + Shift и меню ПКМ продолжают работать через Проводник!
+    /// При закрытии окна (✕) выгружает тяжёлое окно HubWindow из оперативной памяти в сверхлёгкий спящий режим (~2-3 МБ ОЗУ, 0% CPU).
+    /// Хук перетаскивания с Shift и иконка в трее продолжают мгновенно работать.
+    /// Полное выключение процесса выполняется через кнопку «Выключить» в сайдбаре или меню трея.
     /// </summary>
     public static void UnloadHubToSleepMode()
     {
         if (Current is not App app) return;
-        Task.Run(() => AppConfig.InstallAndActivateShellExtension(AppConfig.Data.HoldShiftEnabled));
-        QuitApplication();
+        app.Dispatcher.InvokeAsync(() =>
+        {
+            if (Hub != null)
+            {
+                var h = Hub;
+                Hub = null;
+                h.ForceCloseForSleep();
+            }
+            MemoryOptimizer.ScheduleTrim(250);
+        }, DispatcherPriority.Background);
     }
 
     public static void QuitApplication()
