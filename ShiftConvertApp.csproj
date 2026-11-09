@@ -32,4 +32,8 @@
     <Resource Include="app.ico" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SixLabors.ImageSharp" Version="2.1.4" />
+  </ItemGroup>
+
 </Project>

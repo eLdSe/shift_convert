@@ -39,7 +39,12 @@ public static class ConvertEngine
 {
     private static readonly HashSet<string> ImageExts = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif", ".ico", ".wdp", ".jxr"
+        ".png", ".jpg", ".jpeg", ".webp", ".bmp", ".gif", ".tiff", ".tif", ".ico", ".wdp", ".jxr", ".heic", ".heif"
+    };
+
+    private static readonly HashSet<string> AudioExts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".mp3", ".wav", ".m4a", ".aac", ".flac", ".wma", ".ogg", ".oga", ".opus"
     };
 
     private static readonly HashSet<string> VideoExts = new(StringComparer.OrdinalIgnoreCase)
@@ -53,9 +58,11 @@ public static class ConvertEngine
     };
 
     public static bool IsImageFile(string path) => ImageExts.Contains(Path.GetExtension(path));
+    public static bool IsAudioFile(string path) => AudioExts.Contains(Path.GetExtension(path));
     public static bool IsVideoFile(string path) => VideoExts.Contains(Path.GetExtension(path));
     public static bool IsTextFile(string path) => TextExts.Contains(Path.GetExtension(path));
     public static bool IsZipFile(string path) => string.Equals(Path.GetExtension(path), ".zip", StringComparison.OrdinalIgnoreCase);
+    public static bool IsPdfFile(string path) => string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase);
 
     public static List<ConvertOption> GetOptionsForFiles(IReadOnlyList<string> files, bool forWheel = true)
     {
@@ -64,8 +71,12 @@ public static class ConvertEngine
         bool isDir = Directory.Exists(first);
         bool allImages = files.Count > 0 && files.All(IsImageFile);
         bool allVideos = files.Count > 0 && files.All(IsVideoFile);
+        bool allAudio = files.Count > 0 && files.All(IsAudioFile);
+        bool allPdfs = files.Count > 0 && files.All(IsPdfFile);
         bool isImg = !isDir && (allImages || IsImageFile(first));
         bool isVid = !isDir && (allVideos || IsVideoFile(first));
+        bool isAud = !isDir && (allAudio || IsAudioFile(first));
+        bool isPdf = !isDir && (allPdfs || IsPdfFile(first));
         bool isTxt = !isDir && IsTextFile(first);
         bool isZip = !isDir && IsZipFile(first);
 
@@ -75,6 +86,7 @@ public static class ConvertEngine
             {
                 ".jpg" or ".jpeg" => "jpg",
                 ".tif" or ".tiff" => "tiff",
+                ".heic" or ".heif" => "heic",
                 _ => ext.TrimStart('.')
             };
 
@@ -121,6 +133,29 @@ public static class ConvertEngine
 
         var accentLime = Color.FromRgb(0xC6, 0xF2, 0x4E);
 
+        if (isAud)
+        {
+            var audList = new List<ConvertOption>();
+            if (!string.Equals(ext, ".mp3", StringComparison.OrdinalIgnoreCase))
+            {
+                audList.Add(new() { Key = "aud_mp3", Label = "MP3", SubLabel = Loc.T("Высокое качество", "High Quality 320k", "Yüksek Kalite"), Icon = "\uE8D6", Accent = Color.FromRgb(0xC6, 0xF2, 0x4E) });
+            }
+            if (!string.Equals(ext, ".wav", StringComparison.OrdinalIgnoreCase))
+            {
+                audList.Add(new() { Key = "aud_wav", Label = "WAV", SubLabel = Loc.T("Без потерь PCM", "Lossless WAV", "Kayıpsız PCM"), Icon = "\uEC4F", Accent = Color.FromRgb(0x38, 0xBD, 0xF8) });
+            }
+            if (!string.Equals(ext, ".m4a", StringComparison.OrdinalIgnoreCase) && !string.Equals(ext, ".aac", StringComparison.OrdinalIgnoreCase))
+            {
+                audList.Add(new() { Key = "aud_m4a", Label = "M4A", SubLabel = Loc.T("Apple AAC", "Apple AAC", "Apple AAC"), Icon = "\uE896", Accent = Color.FromRgb(0xA7, 0x8B, 0xFA) });
+            }
+            audList.Add(new() { Key = "aud_compress", Label = Loc.T("Сжать", "Compress", "Sıkıştır"), SubLabel = Loc.T("Для речи (96k)", "Voice 96k", "Ses 96k"), Icon = "\uE740", Accent = Color.FromRgb(0x34, 0xD3, 0x99) });
+            audList.Add(new() { Key = "zip", Label = "ZIP", SubLabel = Loc.T("В архив", "Archive", "Arşivle"), Icon = "\uF012", Accent = Color.FromRgb(0xFB, 0x92, 0x3C) });
+            audList.Add(new() { Key = "sha256", Label = "SHA-256", SubLabel = Loc.T("Хеш аудио", "Audio Hash", "Hash Kopyala"), Icon = "\uE72E", Accent = Color.FromRgb(0x94, 0xA3, 0xB8) });
+            audList.Add(new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать файл", "Copy File", "Dosyayı Kopyala"), Icon = "\uE8C8", Accent = Color.FromRgb(0xE2, 0xE8, 0xF0) });
+
+            return forWheel && audList.Count > 8 ? audList.Take(8).ToList() : audList;
+        }
+
         if (isVid)
         {
             var vidList = new List<ConvertOption>
@@ -161,6 +196,20 @@ public static class ConvertEngine
             vidList.Add(new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать", "To Clipboard", "Kopyala"), Icon = "\uE8C8", Accent = Color.FromRgb(0xE2, 0xE8, 0xF0) });
 
             return forWheel && vidList.Count > 8 ? vidList.Take(8).ToList() : vidList;
+        }
+
+        if (isPdf)
+        {
+            var pdfList = new List<ConvertOption>
+            {
+                new() { Key = "pdf_png_all", Label = "PNG", SubLabel = Loc.T("Все страницы", "All pages HD", "Tüm sayfalar"), Icon = "\uEB9F", Accent = Color.FromRgb(0x38, 0xBD, 0xF8) },
+                new() { Key = "pdf_png_first", Label = "1-я стр.", SubLabel = Loc.T("Титульный лист", "First page only", "İlk sayfa"), Icon = "\uE8B9", Accent = Color.FromRgb(0xC6, 0xF2, 0x4E) },
+                new() { Key = "pdf_ocr", Label = "OCR", SubLabel = Loc.T("Текст в .txt", "Extract text", "Metni al"), Icon = "\uE8EC", Accent = Color.FromRgb(0x81, 0x8C, 0xF8) },
+                new() { Key = "zip", Label = "ZIP", SubLabel = Loc.T("В архив", "Archive", "Arşivle"), Icon = "\uF012", Accent = Color.FromRgb(0xFB, 0x92, 0x3C) },
+                new() { Key = "sha256", Label = "SHA-256", SubLabel = Loc.T("Хеш документа", "Document hash", "Hash kopyala"), Icon = "\uE72E", Accent = Color.FromRgb(0x94, 0xA3, 0xB8) },
+                new() { Key = "clipboard", Label = Loc.T("В буфер", "Copy", "Panoya"), SubLabel = Loc.T("Скопировать файл", "Copy file", "Dosyayı kopyala"), Icon = "\uE8C8", Accent = Color.FromRgb(0xE2, 0xE8, 0xF0) },
+            };
+            return forWheel && pdfList.Count > 8 ? pdfList.Take(8).ToList() : pdfList;
         }
 
         if (isTxt)
@@ -419,6 +468,8 @@ public static class ConvertEngine
         int okCount = 0;
         long totalOldBytes = 0;
         long totalNewBytes = 0;
+        int totalFilesToProcess = files.Count(f => File.Exists(f) || Directory.Exists(f));
+        int processedFileIndex = 0;
 
         foreach (string file in files)
         {
@@ -463,10 +514,19 @@ public static class ConvertEngine
                     });
                     lastOutput = file;
                     okCount++;
+                    processedFileIndex++;
+                    onProgress?.Invoke(totalFilesToProcess > 0 ? (processedFileIndex * 100.0 / totalFilesToProcess) : 100.0);
                     continue;
                 }
 
-                string? outPath = ConvertSingleFile(file, targetKey, out BitmapSource? outBmp, onProgress, ct);
+                int currentBatchIdx = processedFileIndex;
+                Action<double>? batchProgress = (onProgress != null && totalFilesToProcess > 1)
+                    ? (pct => onProgress.Invoke(Math.Clamp((currentBatchIdx * 100.0 + pct) / totalFilesToProcess, 0.0, 99.0)))
+                    : onProgress;
+
+                string? outPath = ConvertSingleFile(file, targetKey, out BitmapSource? outBmp, batchProgress, ct);
+                processedFileIndex++;
+                onProgress?.Invoke(totalFilesToProcess > 0 ? Math.Clamp(processedFileIndex * 100.0 / totalFilesToProcess, 0.0, 99.0) : 100.0);
                 if (ct.IsCancellationRequested)
                 {
                     if (!string.IsNullOrEmpty(outPath))
@@ -553,6 +613,13 @@ public static class ConvertEngine
             "vid_gif" => "GIF",
             "vid_mute" => "MUTE MP4",
             "vid_frame" => "FRAME PNG",
+            "aud_mp3" => "MP3",
+            "aud_wav" => "WAV",
+            "aud_m4a" => "M4A",
+            "aud_compress" => "MP3 96K",
+            "pdf_png_all" => "PDF TO PNG",
+            "pdf_png_first" => "PAGE 1 PNG",
+            "pdf_ocr" => "PDF OCR",
             _ => targetKey.ToUpperInvariant()
         };
 
@@ -634,6 +701,45 @@ public static class ConvertEngine
                         producedBitmap = frameBmp;
                         return framePath;
                     }
+                default:
+                    return null;
+            }
+        }
+
+        if (IsAudioFile(inputPath))
+        {
+            switch (targetKey)
+            {
+                case "aud_mp3":
+                case "mp3":
+                    return TranscodeAudioFileAsync(inputPath, "aud_mp3", onProgress, ct).GetAwaiter().GetResult();
+                case "aud_wav":
+                case "wav":
+                    return TranscodeAudioFileAsync(inputPath, "aud_wav", onProgress, ct).GetAwaiter().GetResult();
+                case "aud_m4a":
+                case "m4a":
+                    return TranscodeAudioFileAsync(inputPath, "aud_m4a", onProgress, ct).GetAwaiter().GetResult();
+                case "aud_compress":
+                    return TranscodeAudioFileAsync(inputPath, "aud_compress", onProgress, ct).GetAwaiter().GetResult();
+                default:
+                    return null;
+            }
+        }
+
+        if (IsPdfFile(inputPath))
+        {
+            switch (targetKey)
+            {
+                case "pdf_png_all":
+                    return RenderPdfToPngAsync(inputPath, renderAll: true, onProgress, ct).GetAwaiter().GetResult();
+                case "pdf_png_first":
+                    {
+                        var (outPath, firstBmp) = RenderPdfPageOneAsync(inputPath, ct).GetAwaiter().GetResult();
+                        producedBitmap = firstBmp;
+                        return outPath;
+                    }
+                case "pdf_ocr":
+                    return ExtractTextFromPdfOcrAsync(inputPath, onProgress, ct).GetAwaiter().GetResult();
                 default:
                     return null;
             }
@@ -745,13 +851,92 @@ public static class ConvertEngine
 
     private static BitmapSource? LoadBitmap(string path)
     {
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        var decoder = BitmapDecoder.Create(fs, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
-        var frame = decoder.Frames.FirstOrDefault();
-        if (frame == null) return null;
-        var converted = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
-        converted.Freeze();
-        return converted;
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var decoder = BitmapDecoder.Create(fs, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+            var frame = decoder.Frames.FirstOrDefault();
+            if (frame != null)
+            {
+                var converted = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+                converted.Freeze();
+                return converted;
+            }
+        }
+        catch
+        {
+            // WIC fallback for WebP, HEIC/HEIF or exotic image types
+        }
+
+        var imageSharpBmp = LoadBitmapViaImageSharp(path);
+        if (imageSharpBmp != null) return imageSharpBmp;
+
+        return LoadBitmapViaWinRt(path);
+    }
+
+    private static BitmapSource? LoadBitmapViaImageSharp(string path)
+    {
+        try
+        {
+            using var image = SixLabors.ImageSharp.Image.Load<SixLabors.ImageSharp.PixelFormats.Bgra32>(path);
+            int width = image.Width;
+            int height = image.Height;
+            int stride = width * 4;
+            byte[] pixelBytes = new byte[stride * height];
+            image.CopyPixelDataTo(pixelBytes);
+
+            var wbmp = BitmapSource.Create(
+                width,
+                height,
+                96,
+                96,
+                PixelFormats.Bgra32,
+                null,
+                pixelBytes,
+                stride);
+            wbmp.Freeze();
+            return wbmp;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static BitmapSource? LoadBitmapViaWinRt(string path)
+    {
+        try
+        {
+            return Task.Run(async () =>
+            {
+                var sf = await Windows.Storage.StorageFile.GetFileFromPathAsync(path);
+                using var stream = await sf.OpenAsync(Windows.Storage.FileAccessMode.Read);
+                var decoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(stream);
+                using var softBmp = await decoder.GetSoftwareBitmapAsync(
+                    Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
+                    Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied);
+
+                using var memStream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+                var encoder = await Windows.Graphics.Imaging.BitmapEncoder.CreateAsync(
+                    Windows.Graphics.Imaging.BitmapEncoder.PngEncoderId, memStream);
+                encoder.SetSoftwareBitmap(softBmp);
+                await encoder.FlushAsync();
+
+                var netStream = memStream.AsStream();
+                netStream.Position = 0;
+                var bmp = new BitmapImage();
+                bmp.BeginInit();
+                bmp.CacheOption = BitmapCacheOption.OnLoad;
+                bmp.StreamSource = netStream;
+                bmp.EndInit();
+                bmp.Freeze();
+                return (BitmapSource?)bmp;
+            }).GetAwaiter().GetResult();
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static BitmapSource FlattenTransparency(BitmapSource source, Color bg)
@@ -1059,6 +1244,148 @@ public static class ConvertEngine
         return sb.ToString().Trim();
     }
 
+    // ==================== АППАРАТНЫЙ PDF-ДВИЖОК WINDOWS.DATA.PDF ====================
+
+    private static async Task<string?> RenderPdfToPngAsync(string inputPath, bool renderAll, Action<double>? onProgress, CancellationToken ct = default)
+    {
+        var sf = await Windows.Storage.StorageFile.GetFileFromPathAsync(inputPath);
+        var pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(sf);
+        uint count = pdfDoc.PageCount;
+        if (count == 0) return null;
+
+        string dir = Path.GetDirectoryName(inputPath) ?? "";
+        string baseName = Path.GetFileNameWithoutExtension(inputPath);
+
+        if (count == 1 || !renderAll)
+        {
+            string outPath = GetUniqueOutputPath(inputPath, ".png", "_page_1");
+            await RenderSinglePdfPageToFileAsync(pdfDoc, 0, outPath, ct);
+            onProgress?.Invoke(100.0);
+            return outPath;
+        }
+
+        string targetFolder = Path.Combine(dir, $"{baseName}_pages");
+        if (!Directory.Exists(targetFolder))
+        {
+            Directory.CreateDirectory(targetFolder);
+        }
+
+        string? firstPagePath = null;
+        for (uint i = 0; i < count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            string pageOut = Path.Combine(targetFolder, $"{baseName}_page_{i + 1:D2}.png");
+            await RenderSinglePdfPageToFileAsync(pdfDoc, i, pageOut, ct);
+            if (i == 0) firstPagePath = pageOut;
+            onProgress?.Invoke(((i + 1) * 100.0) / count);
+        }
+
+        return firstPagePath ?? targetFolder;
+    }
+
+    private static async Task<(string? OutPath, BitmapSource? Bmp)> RenderPdfPageOneAsync(string inputPath, CancellationToken ct = default)
+    {
+        var sf = await Windows.Storage.StorageFile.GetFileFromPathAsync(inputPath);
+        var pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(sf);
+        if (pdfDoc.PageCount == 0) return (null, null);
+
+        string outPath = GetUniqueOutputPath(inputPath, ".png", "_page_1");
+        var bmp = await RenderSinglePdfPageToFileAsync(pdfDoc, 0, outPath, ct);
+        return (outPath, bmp);
+    }
+
+    private static async Task<BitmapSource?> RenderSinglePdfPageToFileAsync(Windows.Data.Pdf.PdfDocument doc, uint pageIdx, string outFilePath, CancellationToken ct)
+    {
+        using var page = doc.GetPage(pageIdx);
+        using var memStream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+
+        var renderOptions = new Windows.Data.Pdf.PdfPageRenderOptions
+        {
+            BackgroundColor = Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF),
+            DestinationWidth = (uint)Math.Clamp(page.Size.Width * 2.0, 800, 3840)
+        };
+
+        await page.RenderToStreamAsync(memStream, renderOptions);
+        ct.ThrowIfCancellationRequested();
+
+        using var netStream = memStream.AsStream();
+        netStream.Position = 0;
+
+        var decoder = BitmapDecoder.Create(netStream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+        var frame = decoder.Frames.FirstOrDefault();
+        if (frame == null) return null;
+
+        var converted = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+        converted.Freeze();
+
+        var pngEnc = new PngBitmapEncoder();
+        pngEnc.Frames.Add(BitmapFrame.Create(converted));
+        using (var outFs = File.Create(outFilePath))
+        {
+            pngEnc.Save(outFs);
+        }
+
+        return converted;
+    }
+
+    private static async Task<string?> ExtractTextFromPdfOcrAsync(string inputPath, Action<double>? onProgress, CancellationToken ct = default)
+    {
+        var sf = await Windows.Storage.StorageFile.GetFileFromPathAsync(inputPath);
+        var pdfDoc = await Windows.Data.Pdf.PdfDocument.LoadFromFileAsync(sf);
+        uint count = pdfDoc.PageCount;
+        if (count == 0) return null;
+
+        var sb = new StringBuilder();
+        var engine = Windows.Media.Ocr.OcrEngine.TryCreateFromUserProfileLanguages()
+                     ?? Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("ru"))
+                     ?? Windows.Media.Ocr.OcrEngine.TryCreateFromLanguage(new Windows.Globalization.Language("en"));
+
+        if (engine == null) return null;
+
+        for (uint i = 0; i < count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            using var page = pdfDoc.GetPage(i);
+            using var memStream = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+            var renderOptions = new Windows.Data.Pdf.PdfPageRenderOptions
+            {
+                BackgroundColor = Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF),
+                DestinationWidth = (uint)Math.Clamp(page.Size.Width * 2.0, 1000, 2400)
+            };
+            await page.RenderToStreamAsync(memStream, renderOptions);
+            memStream.Seek(0);
+
+            var winDecoder = await Windows.Graphics.Imaging.BitmapDecoder.CreateAsync(memStream);
+            using var softBmp = await winDecoder.GetSoftwareBitmapAsync(
+                Windows.Graphics.Imaging.BitmapPixelFormat.Bgra8,
+                Windows.Graphics.Imaging.BitmapAlphaMode.Premultiplied);
+
+            var ocrRes = await engine.RecognizeAsync(softBmp);
+            if (ocrRes != null)
+            {
+                if (count > 1) sb.AppendLine($"--- {Loc.T("Страница", "Page", "Sayfa")} {i + 1} ---");
+                foreach (var line in ocrRes.Lines)
+                {
+                    sb.AppendLine(line.Text);
+                }
+                sb.AppendLine();
+            }
+
+            onProgress?.Invoke(((i + 1) * 100.0) / count);
+        }
+
+        string recognizedText = sb.ToString().Trim();
+        string outTxtPath = GetUniqueOutputPath(inputPath, ".txt", "_ocr");
+        File.WriteAllText(outTxtPath, recognizedText, Encoding.UTF8);
+
+        Application.Current?.Dispatcher.Invoke(() =>
+        {
+            try { Clipboard.SetText(recognizedText); } catch { }
+        });
+
+        return outTxtPath;
+    }
+
     // ==================== АППАРАТНЫЙ ВИДЕО-ДВИЖОК WINDOWS MEDIA FOUNDATION ====================
 
     private static async Task<Windows.Storage.StorageFile> CreateEmptyWinRtFileAsync(string outputPath)
@@ -1128,6 +1455,103 @@ public static class ConvertEngine
         }
 
         try { File.Delete(outM4a); } catch { }
+        return null;
+    }
+
+    private static async Task<string?> TranscodeAudioFileAsync(string inputPath, string targetKey, Action<double>? onProgress, CancellationToken ct = default)
+    {
+        var inSf = await Windows.Storage.StorageFile.GetFileFromPathAsync(inputPath);
+        var transcoder = new Windows.Media.Transcoding.MediaTranscoder
+        {
+            HardwareAccelerationEnabled = true
+        };
+
+        string outExt = targetKey switch
+        {
+            "aud_wav" or "wav" => ".wav",
+            "aud_m4a" or "m4a" => ".m4a",
+            "aud_compress" => "_compressed.mp3",
+            _ => ".mp3"
+        };
+
+        string outPath = GetUniqueOutputPath(inputPath, outExt.StartsWith('_') ? ".mp3" : outExt, outExt.StartsWith('_') ? "_compressed" : "");
+        var outSf = await CreateEmptyWinRtFileAsync(outPath);
+
+        Windows.Media.MediaProperties.MediaEncodingProfile profile;
+        if (targetKey is "aud_wav" or "wav")
+        {
+            profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateWav(
+                Windows.Media.MediaProperties.AudioEncodingQuality.High);
+        }
+        else if (targetKey is "aud_m4a" or "m4a")
+        {
+            profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateM4a(
+                Windows.Media.MediaProperties.AudioEncodingQuality.High);
+        }
+        else if (targetKey == "aud_compress")
+        {
+            profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateMp3(
+                Windows.Media.MediaProperties.AudioEncodingQuality.Medium);
+            try
+            {
+                if (profile.Audio != null) profile.Audio.Bitrate = 96000;
+            }
+            catch { }
+        }
+        else
+        {
+            profile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateMp3(
+                Windows.Media.MediaProperties.AudioEncodingQuality.High);
+        }
+
+        var prep = await transcoder.PrepareFileTranscodeAsync(inSf, outSf, profile);
+        if (prep.CanTranscode)
+        {
+            try
+            {
+                var op = prep.TranscodeAsync();
+                using var reg = ct.Register(() => { try { op.Cancel(); } catch { } });
+                op.Progress = (_, pct) => onProgress?.Invoke(pct);
+                await op;
+                ct.ThrowIfCancellationRequested();
+                return outPath;
+            }
+            catch
+            {
+                try { File.Delete(outPath); } catch { }
+                throw;
+            }
+        }
+
+        if (targetKey is "aud_mp3" or "mp3")
+        {
+            try { File.Delete(outPath); } catch { }
+            string fallbackM4a = GetUniqueOutputPath(inputPath, ".m4a");
+            var fallbackSf = await CreateEmptyWinRtFileAsync(fallbackM4a);
+            var m4aProfile = Windows.Media.MediaProperties.MediaEncodingProfile.CreateM4a(
+                Windows.Media.MediaProperties.AudioEncodingQuality.High);
+            var prepM4a = await transcoder.PrepareFileTranscodeAsync(inSf, fallbackSf, m4aProfile);
+            if (prepM4a.CanTranscode)
+            {
+                try
+                {
+                    var op = prepM4a.TranscodeAsync();
+                    using var reg = ct.Register(() => { try { op.Cancel(); } catch { } });
+                    op.Progress = (_, pct) => onProgress?.Invoke(pct);
+                    await op;
+                    ct.ThrowIfCancellationRequested();
+                    return fallbackM4a;
+                }
+                catch
+                {
+                    try { File.Delete(fallbackM4a); } catch { }
+                    throw;
+                }
+            }
+            try { File.Delete(fallbackM4a); } catch { }
+        }
+
+        try { File.Delete(outPath); } catch { }
         return null;
     }
 
